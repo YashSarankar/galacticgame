@@ -2,13 +2,13 @@ import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/game_state.dart';
 import '../models/ship_model.dart';
-
-
+import '../models/boss_model.dart';
 import '../models/mission_model.dart';
 import '../models/skill_node_model.dart';
 import '../models/career_model.dart';
 import '../services/sound_service.dart';
 import '../services/storage_service.dart';
+
 
 class GameEconomyNotifier extends StateNotifier<GameState> {
   final SoundService _soundService = SoundService();
@@ -402,8 +402,80 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
       _autoSaveDebounced();
       return true;
     }
-
   }
+
+  /// Recycles/disassembles a ship from the grid to refund 70% of its base purchase value
+  double recycleShip(int slotIndex) {
+    if (slotIndex < 0 || slotIndex >= state.gridSlots.length) return 0.0;
+    final ship = state.gridSlots[slotIndex];
+    if (ship == null || ship.isBox) return 0.0;
+
+    final double refund =
+        ShipModel.calculatePurchaseCost(state.totalShipsPurchased, ship.tier) *
+            0.7;
+
+    final newSlots = List<ShipModel?>.from(state.gridSlots);
+    newSlots[slotIndex] = null;
+
+    state = state.copyWith(
+      credits: state.credits + refund,
+      lifetimeCredits: state.lifetimeCredits + refund,
+      gridSlots: newSlots,
+      trackShips: computeTrackFleet(newSlots),
+    );
+
+    _soundService.playPurchaseSound();
+    _autoSaveDebounced();
+    return refund;
+  }
+
+  /// Automatically merges all available pairs on the flight deck with one tap
+  int autoMergeGrid() {
+    final int unlockedLimit = maxUnlockedGridSlots;
+    final newSlots = List<ShipModel?>.from(state.gridSlots);
+    int totalMergesMade = 0;
+    int newHighest = state.highestTierUnlocked;
+
+    bool foundMerge = true;
+    while (foundMerge) {
+      foundMerge = false;
+      for (int i = 0; i < unlockedLimit; i++) {
+        final shipA = newSlots[i];
+        if (shipA == null || shipA.isBox) continue;
+
+        for (int j = i + 1; j < unlockedLimit; j++) {
+          final shipB = newSlots[j];
+          if (shipB == null || shipB.isBox) continue;
+
+          if (shipA.tier == shipB.tier && shipA.tier < 30) {
+            final int newTier = shipA.tier + 1;
+            newSlots[i] = ShipModel.create(newTier);
+            newSlots[j] = null;
+            newHighest = max(newHighest, newTier);
+            totalMergesMade++;
+            foundMerge = true;
+            break;
+          }
+        }
+        if (foundMerge) break;
+      }
+    }
+
+    if (totalMergesMade > 0) {
+      state = state.copyWith(
+        gridSlots: newSlots,
+        trackShips: computeTrackFleet(newSlots),
+        totalMergesCount: state.totalMergesCount + totalMergesMade,
+        highestTierUnlocked: newHighest,
+        comboCount: totalMergesMade,
+        lastComboMessage: '⚡ $totalMergesMade MERGES AUTO-COMPLETED!',
+      );
+      _soundService.playMergeSound();
+      _autoSaveDebounced();
+    }
+    return totalMergesMade;
+  }
+
 
 
   /// Derives active racing track fleet directly from grid slots (highest tiers first, max 4, ignoring unopened crates)
@@ -516,7 +588,79 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     _autoSaveDebounced();
   }
 
+  /// Spawns an Alien Dreadnought Boss Incursion in the center of the track
+
+  void spawnAlienBoss() {
+    if (state.activeBoss != null && !state.activeBoss!.isDead) return;
+
+    final double highestIncome = state.trackShips.isNotEmpty
+        ? state.trackShips.first.calculateIncomePayout()
+        : 50.0;
+
+    final newBoss = BossModel.createForSector(
+      state.career.sectorLevel,
+      highestIncome,
+    );
+
+
+    state = state.copyWith(activeBoss: newBoss);
+    _soundService.playPrestigeSound();
+    _autoSaveDebounced();
+  }
+
+  /// Deals damage to the active Alien Boss (from fleet auto-lasers or player tap-strikes)
+  void damageBoss(double damage, {bool isTap = false}) {
+    final boss = state.activeBoss;
+    if (boss == null || boss.isDead) return;
+
+    final double newHp = max(0.0, boss.currentHealth - damage);
+    final updatedBoss = boss.copyWith(currentHealth: newHp);
+
+    if (newHp <= 0.0) {
+      recordBossDefeated();
+    } else {
+      state = state.copyWith(activeBoss: updatedBoss);
+    }
+  }
+
+  /// Ticks down the Boss incursion timer (e.g. called from loop)
+  void tickBoss(double dt) {
+    final boss = state.activeBoss;
+    if (boss == null) return;
+
+    final double newTime = boss.timeRemaining - dt;
+    if (newTime <= 0.0) {
+      // Boss escaped
+      state = state.copyWith(clearActiveBoss: true);
+    } else {
+      state = state.copyWith(activeBoss: boss.copyWith(timeRemaining: newTime));
+    }
+  }
+
+  /// Handles Boss Defeat: Supernova payout (Dark Matter, massive credits, and high-tier crate)
+  void recordBossDefeated() {
+    final boss = state.activeBoss;
+    if (boss == null) return;
+
+    final double rewardCoins = boss.bountyCredits;
+    final double rewardDm = boss.bountyDarkMatter;
+
+    state = state.copyWith(
+      credits: state.credits + rewardCoins,
+      lifetimeCredits: state.lifetimeCredits + rewardCoins,
+      darkMatter: state.darkMatter + rewardDm,
+      clearActiveBoss: true,
+    );
+
+    // Drop free high-tier mystery crate on flight deck
+    dropMysteryCargo();
+
+    _soundService.playPrestigeSound();
+    _autoSaveDebounced();
+  }
+
   /// Evaluates and advances missions based on actions
+
   List<MissionModel> _evaluateMissions(
     List<MissionModel> currentMissions, {
     int mergesIncrement = 0,

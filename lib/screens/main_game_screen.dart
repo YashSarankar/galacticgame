@@ -19,6 +19,7 @@ import 'modals/missions_modal.dart';
 import 'modals/offline_earnings_modal.dart';
 import 'modals/prestige_modal.dart';
 import 'modals/skill_tree_modal.dart';
+import 'modals/discovery_modal.dart';
 
 class MainGameScreen extends ConsumerStatefulWidget {
   const MainGameScreen({super.key});
@@ -32,8 +33,11 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
   BannerAd? _bannerAd;
   bool _isBannerAdLoaded = false;
   bool _hasCheckedOffline = false;
+  int _lastSeenHighestTier = 1;
   Timer? _cargoDropTimer;
   Timer? _feverTimer;
+  Timer? _bossIncursionTimer;
+
 
   @override
   void initState() {
@@ -54,6 +58,9 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
       onCanvasTapped: () {
         ref.read(gameStateProvider.notifier).tapRacetrackBoost();
       },
+      onBossDamaged: (damage, {bool isTap = false}) {
+        ref.read(gameStateProvider.notifier).damageBoss(damage, isTap: isTap);
+      },
     );
 
     // Periodic Mystery Cosmic Cargo Crate Drops (Every 38 seconds)
@@ -63,10 +70,19 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
       }
     });
 
-    // Real-time Fever ticker (100ms interval for fluid decay & countdown)
+    // Real-time Fever & Boss ticker (100ms interval for fluid decay & countdown)
     _feverTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
       if (mounted) {
         ref.read(gameStateProvider.notifier).tickFever(0.1);
+        ref.read(gameStateProvider.notifier).tickBoss(0.1);
+      }
+    });
+
+    // Periodic Alien Boss Incursion (Every 2 minutes 30 seconds)
+    _bossIncursionTimer =
+        Timer.periodic(const Duration(minutes: 2, seconds: 30), (_) {
+      if (mounted) {
+        ref.read(gameStateProvider.notifier).spawnAlienBoss();
       }
     });
 
@@ -87,9 +103,11 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
   void dispose() {
     _cargoDropTimer?.cancel();
     _feverTimer?.cancel();
+    _bossIncursionTimer?.cancel();
     _bannerAd?.dispose();
     super.dispose();
   }
+
 
   void _checkOfflineEarningsOnStartup(WidgetRef ref) {
     if (_hasCheckedOffline) return;
@@ -131,12 +149,33 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
     final gameState = ref.watch(gameStateProvider);
     final adState = ref.watch(adStateProvider);
 
-    // Sync active track ships and fever mode with Flame Game engine
+    // Check if player unlocked a brand new highest tier to trigger Discovery Celebration Modal
+    if (gameState.highestTierUnlocked > _lastSeenHighestTier) {
+      final int discoveredTier = gameState.highestTierUnlocked;
+      _lastSeenHighestTier = discoveredTier;
+      if (discoveredTier > 1) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            showDialog(
+              context: context,
+              builder: (ctx) => DiscoveryModal(
+                ship: ShipModel.create(discoveredTier),
+                onDismiss: () {},
+              ),
+            );
+          }
+        });
+      }
+    }
+
+    // Sync active track ships, active boss, and fever mode with Flame Game engine
     _galacticGame.updateShips(gameState.trackShips);
+    _galacticGame.updateBoss(gameState.activeBoss);
     _galacticGame.setSpeedMultiplier(
       adState.isSpeedBoostActive ? 2.0 : 1.0,
       isFever: gameState.isFeverActive,
     );
+
 
     // Base drop tier & discount calculations for store
     final discountSkill = gameState.career.skills.firstWhere(
@@ -184,11 +223,12 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
             // 3. Active Mission Strip
             _buildActiveMissionBar(gameState),
 
-            // 4. Hyperdrive Warp Meter Bar (Unobstructed above circuit)
+            // 4. Hyperdrive Warp Meter / Boss Siege Alert Bar
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-              child: _buildWarpMeterBar(gameState),
+              child: _buildBossSiegeHUD(gameState),
             ),
+
 
             // 5. Center Flame Canvas (Racetrack)
             Expanded(
@@ -369,57 +409,108 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
             ],
           ),
 
-          // Galactic Prestige Button
-          InkWell(
-            borderRadius: BorderRadius.circular(10),
-            onTap: () {
-              showDialog(
-                context: context,
-                builder: (ctx) => PrestigeModal(
-                  state: state,
-                  onPrestige: () {
-                    ref.read(gameStateProvider.notifier).performGalacticPrestige();
+          Row(
+            children: [
+              // Boss Summon Beacon (if no boss active)
+              if (state.activeBoss == null || state.activeBoss!.isDead) ...[
+                InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () {
+                    ref.read(gameStateProvider.notifier).spawnAlienBoss();
                   },
-                  onPrestigeDoubled: () {
-                    ref
-                        .read(gameStateProvider.notifier)
-                        .performGalacticPrestige(doubleYield: true);
-                  },
-                ),
-              );
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: GameTheme.neonMagenta.withAlpha((0.25 * 255).round()),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: GameTheme.neonMagenta, width: 1.2),
-              ),
-              child: const Row(
-                children: [
-                  Icon(
-                    Icons.restart_alt_rounded,
-                    color: GameTheme.neonMagenta,
-                    size: 16,
-                  ),
-                  SizedBox(width: 4),
-                  Text(
-                    'PRESTIGE',
-                    style: TextStyle(
-                      color: GameTheme.neonMagenta,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0.6,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFF0055)
+                          .withAlpha((0.25 * 255).round()),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                          color: const Color(0xFFFF0055), width: 1.2),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(
+                          Icons.radar_rounded,
+                          color: Color(0xFFFF0055),
+                          size: 14,
+                        ),
+                        SizedBox(width: 3),
+                        Text(
+                          'BEACON',
+                          style: TextStyle(
+                            color: Color(0xFFFF0055),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
+                ),
+                const SizedBox(width: 6),
+              ],
+
+              // Galactic Prestige Button
+              InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => PrestigeModal(
+                      state: state,
+                      onPrestige: () {
+                        ref
+                            .read(gameStateProvider.notifier)
+                            .performGalacticPrestige();
+                      },
+                      onPrestigeDoubled: () {
+                        ref
+                            .read(gameStateProvider.notifier)
+                            .performGalacticPrestige(doubleYield: true);
+                      },
+                    ),
+                  );
+                },
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color:
+                        GameTheme.neonMagenta.withAlpha((0.25 * 255).round()),
+                    borderRadius: BorderRadius.circular(10),
+                    border:
+                        Border.all(color: GameTheme.neonMagenta, width: 1.2),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(
+                        Icons.restart_alt_rounded,
+                        color: GameTheme.neonMagenta,
+                        size: 16,
+                      ),
+                      SizedBox(width: 4),
+                      Text(
+                        'PRESTIGE',
+                        style: TextStyle(
+                          color: GameTheme.neonMagenta,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ],
       ),
     );
   }
+
 
   Widget _buildActiveMissionBar(GameState state) {
     final unclaimedMissions =
@@ -596,7 +687,85 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
     );
   }
 
+  Widget _buildBossSiegeHUD(GameState state) {
+
+    final boss = state.activeBoss;
+    if (boss == null || boss.isDead) {
+      return _buildWarpMeterBar(state);
+    }
+
+    final double hpPercent = boss.healthPercentage;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.black.withAlpha((0.85 * 255).round()),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFFFF0055),
+          width: 1.5,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0xFFFF0055),
+            blurRadius: 10,
+            spreadRadius: 1,
+          )
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    color: Color(0xFFFF0055),
+                    size: 14,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '⚠️ ${boss.name.toUpperCase()} SIEGE',
+                    style: const TextStyle(
+                      color: Color(0xFFFFD700),
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                '⏱️ ${boss.timeRemaining.toStringAsFixed(1)}s  |  HP: ${(hpPercent * 100).toInt()}%',
+                style: const TextStyle(
+                  color: Color(0xFFFF0055),
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: LinearProgressIndicator(
+              value: hpPercent,
+              minHeight: 4,
+              backgroundColor: Colors.white10,
+              valueColor:
+                  const AlwaysStoppedAnimation<Color>(Color(0xFFFF0055)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildWarpMeterBar(GameState state) {
+
     final bool isFever = state.isFeverActive;
     final double progress = isFever
         ? (state.feverTimeRemaining / 10.0).clamp(0.0, 1.0)
@@ -1021,14 +1190,104 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
     required int unclaimedMissions,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: GameTheme.backgroundSurface,
-        border: const Border(top: BorderSide(color: GameTheme.cardBorder)),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      decoration: GameTheme.glassCard(
+        borderColor: GameTheme.cardBorder,
+        radius: 16,
       ),
       child: Row(
         children: [
-          // 1. Tech Tree Button
+          // 0. DragTarget Scrap / Recycle Bin
+          DragTarget<int>(
+            onWillAcceptWithDetails: (details) => true,
+            onAcceptWithDetails: (details) {
+              final refund = ref
+                  .read(gameStateProvider.notifier)
+                  .recycleShip(details.data);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  backgroundColor: const Color(0xFF1E293B),
+                  content: Text(
+                    '♻️ Recycled for +${NumberFormatter.formatCredits(refund)} credits!',
+                    style: const TextStyle(
+                      color: Color(0xFF00F5FF),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  duration: const Duration(seconds: 1),
+                ),
+              );
+            },
+            builder: (context, candidateData, rejectedData) {
+              final isHovered = candidateData.isNotEmpty;
+              return Container(
+                width: 44,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: isHovered
+                      ? const Color(0xFFFF0055).withAlpha((0.35 * 255).round())
+                      : GameTheme.cardSurface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isHovered
+                        ? const Color(0xFFFF0055)
+                        : Colors.white24,
+                    width: isHovered ? 2.0 : 1.0,
+                  ),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.delete_sweep_rounded,
+                      color:
+                          isHovered ? const Color(0xFFFF0055) : Colors.white60,
+                      size: 18,
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      'SCRAP',
+                      style: TextStyle(
+                        color: isHovered
+                            ? const Color(0xFFFF0055)
+                            : Colors.white54,
+                        fontSize: 7.5,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 6),
+
+          // 1. Auto-Merge Button
+          _buildActionButton(
+            icon: Icons.auto_awesome_rounded,
+            label: 'AUTO',
+            color: const Color(0xFFFFD700),
+            onTap: () {
+              final count =
+                  ref.read(gameStateProvider.notifier).autoMergeGrid();
+              if (count == 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    backgroundColor: Color(0xFF1E293B),
+                    content: Text(
+                      'No matching pairs ready to merge!',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                    duration: Duration(milliseconds: 900),
+                  ),
+                );
+              }
+            },
+          ),
+          const SizedBox(width: 6),
+
+          // 2. Tech Tree Button
           _buildActionButton(
             icon: Icons.account_tree_rounded,
             label: 'TECH',
@@ -1040,9 +1299,9 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
               );
             },
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
 
-          // 2. Missions Button
+          // 3. Missions Button
           _buildActionButton(
             icon: Icons.flag_rounded,
             label: 'DIRECTIVES',

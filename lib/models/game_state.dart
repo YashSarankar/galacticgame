@@ -1,7 +1,7 @@
 import 'dart:math';
 import 'ship_model.dart';
 import 'career_model.dart';
-
+import 'boss_model.dart';
 
 /// Complete persistent state of the Galactic Merge Idle game.
 class GameState {
@@ -18,6 +18,7 @@ class GameState {
   final int comboCount; // Merge combo chain counter (e.g. 2x, 3x, 4x)
   final int lastMergeTimestamp; // Milliseconds for chaining combos
   final String lastComboMessage; // e.g. "3X ULTRA COMBO!"
+  final BossModel? activeBoss; // Active Alien Dreadnought Incursion
   final int lastSaveTimestamp; // Epoch milliseconds for offline earnings math
   final List<ShipModel?> gridSlots; // 16 items for 4x4 matrix
   final List<ShipModel> trackShips; // Active ships racing on Flame track
@@ -37,11 +38,13 @@ class GameState {
     this.comboCount = 0,
     this.lastMergeTimestamp = 0,
     this.lastComboMessage = '',
+    this.activeBoss,
     required this.lastSaveTimestamp,
     required this.gridSlots,
     required this.trackShips,
     required this.career,
   });
+
 
   /// Factory for fresh game state
   factory GameState.initial() {
@@ -90,6 +93,8 @@ class GameState {
     int? comboCount,
     int? lastMergeTimestamp,
     String? lastComboMessage,
+    BossModel? activeBoss,
+    bool clearActiveBoss = false,
     int? lastSaveTimestamp,
     List<ShipModel?>? gridSlots,
     List<ShipModel>? trackShips,
@@ -109,6 +114,7 @@ class GameState {
       comboCount: comboCount ?? this.comboCount,
       lastMergeTimestamp: lastMergeTimestamp ?? this.lastMergeTimestamp,
       lastComboMessage: lastComboMessage ?? this.lastComboMessage,
+      activeBoss: clearActiveBoss ? null : (activeBoss ?? this.activeBoss),
       lastSaveTimestamp: lastSaveTimestamp ?? this.lastSaveTimestamp,
       gridSlots: gridSlots ?? this.gridSlots,
       trackShips: trackShips ?? this.trackShips,
@@ -125,6 +131,7 @@ class GameState {
       'totalMergesCount': totalMergesCount,
       'totalLineCrossings': totalLineCrossings,
       'highestTierUnlocked': highestTierUnlocked,
+      'activeBoss': activeBoss?.toJson(),
       'lastSaveTimestamp': lastSaveTimestamp,
       'gridSlots': gridSlots.map((s) => s?.toJson()).toList(),
       'trackShips': trackShips.map((s) => s.toJson()).toList(),
@@ -147,6 +154,9 @@ class GameState {
       comboCount: 0,
       lastMergeTimestamp: 0,
       lastComboMessage: '',
+      activeBoss: json['activeBoss'] != null
+          ? BossModel.fromJson(json['activeBoss'] as Map<String, dynamic>)
+          : null,
       lastSaveTimestamp: json['lastSaveTimestamp'] as int? ??
           DateTime.now().millisecondsSinceEpoch,
       gridSlots: json['gridSlots'] != null
@@ -165,5 +175,6 @@ class GameState {
     );
   }
 }
+
 
 

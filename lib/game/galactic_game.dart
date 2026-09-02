@@ -13,19 +13,26 @@ import 'floating_text_component.dart';
 
 
 import 'asteroid_hazard_component.dart';
+import 'boss_dreadnought_component.dart';
+import 'laser_bolt_component.dart';
+import '../models/boss_model.dart';
 
 typedef OnIncomeCallback = void Function(ShipModel ship);
 typedef OnAsteroidCallback = void Function(bool isDarkMatter, double rewardCredits);
+typedef OnBossDamagedCallback = void Function(double damage, {bool isTap});
 
 /// Core Flame Game engine orchestrating the 60 FPS neon track simulation.
 class GalacticGame extends FlameGame with TapCallbacks {
   final OnIncomeCallback onIncomeEarned;
   final OnAsteroidCallback? onAsteroidDestroyed;
   final VoidCallback? onCanvasTapped;
+  final OnBossDamagedCallback? onBossDamaged;
 
   late TrackComponent _track;
   late IncomeLineComponent _incomeLine;
   final List<MovingShipComponent> _activeShipComponents = [];
+  BossDreadnoughtComponent? _bossComponent;
+  BossModel? _activeBoss;
 
   List<ShipModel> _currentShips = [];
   double _globalSpeedMultiplier = 1.0;
@@ -33,12 +40,13 @@ class GalacticGame extends FlameGame with TapCallbacks {
   bool _isInitialized = false;
   double _asteroidTimer = 0.0;
 
-
   GalacticGame({
     required this.onIncomeEarned,
     this.onAsteroidDestroyed,
     this.onCanvasTapped,
+    this.onBossDamaged,
   });
+
 
   @override
   Color backgroundColor() => const Color(0xFF070913);
@@ -223,6 +231,32 @@ class GalacticGame extends FlameGame with TapCallbacks {
   }
 
 
+  /// Updates active Alien Boss incursion component
+  void updateBoss(BossModel? boss) {
+    _activeBoss = boss;
+    if (boss == null || boss.isDead) {
+      if (_bossComponent != null) {
+        _bossComponent!.removeFromParent();
+        _bossComponent = null;
+      }
+      return;
+    }
+
+    if (_bossComponent == null) {
+      final center = Vector2(size.x / 2, size.y / 2);
+      _bossComponent = BossDreadnoughtComponent(
+        boss: boss,
+        centerPosition: center,
+        onBossDamaged: (dmg, {bool isTap = false}) {
+          onBossDamaged?.call(dmg, isTap: isTap);
+        },
+      );
+      add(_bossComponent!);
+    } else {
+      _bossComponent!.updateBossModel(boss);
+    }
+  }
+
   /// Called when any ship crosses the income laser line
   void _handleShipCrossing(ShipModel ship, Vector2 position) {
     // 1. Flash laser gate
@@ -257,8 +291,23 @@ class GalacticGame extends FlameGame with TapCallbacks {
       duration: _isFeverActive ? 1.5 : 1.2,
     ));
 
-    // 5. Notify Riverpod State
+    // 5. Fire Fleet Laser Bolt at Alien Boss if active
+    if (_bossComponent != null && _activeBoss != null && !_activeBoss!.isDead) {
+      final laser = LaserBoltComponent(
+        startPos: position.clone(),
+        targetPos: _bossComponent!.position.clone(),
+        damage: 15.0 + (ship.tier * 6.0),
+        laserColor: ship.glowColor,
+        onHit: (dmg) {
+          _bossComponent?.receiveDamage(dmg, isTap: false);
+        },
+      );
+      add(laser);
+    }
+
+    // 6. Notify Riverpod State
     onIncomeEarned(ship);
   }
 }
+
 

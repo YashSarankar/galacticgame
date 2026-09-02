@@ -124,5 +124,26 @@ void main() {
       expect(notifier.state.darkMatter < 100, true);
       expect(notifier.state.career.skills.first.level, 1);
     });
+
+    test('Boss Incursion spawns, receives damage, and awards bounty on defeat', () {
+      final notifier = GameEconomyNotifier(GameState.initial());
+      expect(notifier.state.activeBoss, isNull);
+
+      notifier.spawnAlienBoss();
+      expect(notifier.state.activeBoss, isNotNull);
+      final initialHp = notifier.state.activeBoss!.maxHealth;
+      expect(notifier.state.activeBoss!.currentHealth, initialHp);
+
+      // Deal partial damage
+      notifier.damageBoss(50.0);
+      expect(notifier.state.activeBoss!.currentHealth, initialHp - 50.0);
+
+      // Deal lethal damage
+      final double prevDm = notifier.state.darkMatter;
+      notifier.damageBoss(initialHp);
+      expect(notifier.state.activeBoss, isNull); // Defeated and cleared
+      expect(notifier.state.darkMatter > prevDm, true); // Awarded bounty Dark Matter
+    });
   });
 }
+
