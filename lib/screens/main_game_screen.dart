@@ -33,11 +33,11 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
   BannerAd? _bannerAd;
   bool _isBannerAdLoaded = false;
   bool _hasCheckedOffline = false;
+  bool _isModalOpen = false;
   int _lastSeenHighestTier = 1;
   Timer? _cargoDropTimer;
   Timer? _feverTimer;
   Timer? _bossIncursionTimer;
-
 
   @override
   void initState() {
@@ -65,14 +65,14 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
 
     // Periodic Mystery Cosmic Cargo Crate Drops (Every 38 seconds)
     _cargoDropTimer = Timer.periodic(const Duration(seconds: 38), (_) {
-      if (mounted) {
+      if (mounted && !_isModalOpen) {
         ref.read(gameStateProvider.notifier).dropMysteryCargo();
       }
     });
 
     // Real-time Fever & Boss ticker (100ms interval for fluid decay & countdown)
     _feverTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
-      if (mounted) {
+      if (mounted && !_isModalOpen) {
         ref.read(gameStateProvider.notifier).tickFever(0.1);
         ref.read(gameStateProvider.notifier).tickBoss(0.1);
       }
@@ -81,7 +81,7 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
     // Periodic Alien Boss Incursion (Every 2 minutes 30 seconds)
     _bossIncursionTimer =
         Timer.periodic(const Duration(minutes: 2, seconds: 30), (_) {
-      if (mounted) {
+      if (mounted && !_isModalOpen) {
         ref.read(gameStateProvider.notifier).spawnAlienBoss();
       }
     });
@@ -108,6 +108,16 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
     super.dispose();
   }
 
+  Future<void> _openGameModal(WidgetBuilder builder) async {
+    _isModalOpen = true;
+    await showDialog(
+      context: context,
+      builder: builder,
+    );
+    if (mounted) {
+      _isModalOpen = false;
+    }
+  }
 
   void _checkOfflineEarningsOnStartup(WidgetRef ref) {
     if (_hasCheckedOffline) return;
@@ -117,30 +127,27 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
       final offlineAsync = ref.read(initialGameLoaderProvider);
       offlineAsync.whenData((offlineResult) {
         if (offlineResult != null && offlineResult.hasSignificantEarnings) {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (ctx) => OfflineEarningsModal(
-              result: offlineResult,
-              onClaimRegular: () {
-                ref
-                    .read(gameStateProvider.notifier)
-                    .claimOfflineEarnings(offlineResult.coinsEarned);
-                Navigator.of(ctx).pop();
-              },
-              onClaimDoubled: () {
-                ref.read(gameStateProvider.notifier).claimOfflineEarnings(
-                      offlineResult.coinsEarned,
-                      doubleReward: true,
-                    );
-                Navigator.of(ctx).pop();
-              },
-            ),
-          );
+          _openGameModal((ctx) => OfflineEarningsModal(
+                result: offlineResult,
+                onClaimRegular: () {
+                  ref
+                      .read(gameStateProvider.notifier)
+                      .claimOfflineEarnings(offlineResult.coinsEarned);
+                  Navigator.of(ctx).pop();
+                },
+                onClaimDoubled: () {
+                  ref.read(gameStateProvider.notifier).claimOfflineEarnings(
+                        offlineResult.coinsEarned,
+                        doubleReward: true,
+                      );
+                  Navigator.of(ctx).pop();
+                },
+              ));
         }
       });
     });
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -156,17 +163,15 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
       if (discoveredTier > 1) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
-            showDialog(
-              context: context,
-              builder: (ctx) => DiscoveryModal(
-                ship: ShipModel.create(discoveredTier),
-                onDismiss: () {},
-              ),
-            );
+            _openGameModal((ctx) => DiscoveryModal(
+                  ship: ShipModel.create(discoveredTier),
+                  onDismiss: () {},
+                ));
           }
         });
       }
     }
+
 
     // Sync active track ships, active boss, and fever mode with Flame Game engine
     _galacticGame.updateShips(gameState.trackShips);
@@ -456,23 +461,21 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
               InkWell(
                 borderRadius: BorderRadius.circular(10),
                 onTap: () {
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => PrestigeModal(
-                      state: state,
-                      onPrestige: () {
-                        ref
-                            .read(gameStateProvider.notifier)
-                            .performGalacticPrestige();
-                      },
-                      onPrestigeDoubled: () {
-                        ref
-                            .read(gameStateProvider.notifier)
-                            .performGalacticPrestige(doubleYield: true);
-                      },
-                    ),
-                  );
+                  _openGameModal((ctx) => PrestigeModal(
+                        state: state,
+                        onPrestige: () {
+                          ref
+                              .read(gameStateProvider.notifier)
+                              .performGalacticPrestige();
+                        },
+                        onPrestigeDoubled: () {
+                          ref
+                              .read(gameStateProvider.notifier)
+                              .performGalacticPrestige(doubleYield: true);
+                        },
+                      ));
                 },
+
                 child: Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1293,10 +1296,7 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
             label: 'TECH',
             color: GameTheme.neonPurple,
             onTap: () {
-              showDialog(
-                context: context,
-                builder: (ctx) => const SkillTreeModal(),
-              );
+              _openGameModal((ctx) => const SkillTreeModal());
             },
           ),
           const SizedBox(width: 6),
@@ -1308,12 +1308,10 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
             color: GameTheme.neonGreen,
             badgeCount: unclaimedMissions,
             onTap: () {
-              showDialog(
-                context: context,
-                builder: (ctx) => const MissionsModal(),
-              );
+              _openGameModal((ctx) => const MissionsModal());
             },
           ),
+
 
           const SizedBox(width: 8),
 
