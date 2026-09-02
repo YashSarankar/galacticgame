@@ -4,13 +4,13 @@ import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import '../models/ship_model.dart';
+import '../models/sector_theme_model.dart';
 import '../utils/number_formatter.dart';
 import 'track_component.dart';
 import 'income_line_component.dart';
 import 'moving_ship_component.dart';
 import 'particle_effects.dart';
 import 'floating_text_component.dart';
-
 
 import 'asteroid_hazard_component.dart';
 import 'boss_dreadnought_component.dart';
@@ -33,6 +33,7 @@ class GalacticGame extends FlameGame with TapCallbacks {
   final List<MovingShipComponent> _activeShipComponents = [];
   BossDreadnoughtComponent? _bossComponent;
   BossModel? _activeBoss;
+  SectorThemeModel _currentTheme = SectorThemeModel.getThemeForSector(1);
 
   List<ShipModel> _currentShips = [];
   double _globalSpeedMultiplier = 1.0;
@@ -47,28 +48,35 @@ class GalacticGame extends FlameGame with TapCallbacks {
     this.onBossDamaged,
   });
 
-
   @override
   Color backgroundColor() => const Color(0xFF070913);
+
+  void updateSectorTheme(SectorThemeModel theme) {
+    _currentTheme = theme;
+    if (_isInitialized) {
+      _track.updateTheme(theme);
+    }
+  }
 
   @override
   void onTapDown(TapDownEvent event) {
     super.onTapDown(event);
     onCanvasTapped?.call();
 
-    // Spawn touch ripple & sparks
+    // Spawn touch ripple & dynamic sector sparks
     add(RadialShockwaveComponent(
       position: event.canvasPosition,
-      color: const Color(0xFF00F5FF),
-      maxRadius: 28.0,
+      color: _currentTheme.trackPrimaryGlow,
+      maxRadius: 32.0,
       duration: 0.35,
     ));
     add(SparkBurstComponent(
       position: event.canvasPosition,
-      baseColor: const Color(0xFF00F5FF),
-      count: 10,
+      baseColor: _currentTheme.particleSparkColor,
+      count: 14,
     ));
   }
+
 
   @override
   Future<void> onLoad() async {

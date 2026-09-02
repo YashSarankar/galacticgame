@@ -25,8 +25,16 @@ import 'modals/wormhole_roulette_modal.dart';
 import 'modals/expeditions_modal.dart';
 import 'modals/daily_calendar_modal.dart';
 import 'modals/cosmic_store_modal.dart';
+import 'modals/mystery_card_modal.dart';
+import 'modals/comet_rush_modal.dart';
+import 'modals/achievements_modal.dart';
+import 'modals/settings_modal.dart';
+import '../models/sector_theme_model.dart';
 
 class MainGameScreen extends ConsumerStatefulWidget {
+
+
+
 
 
 
@@ -37,7 +45,8 @@ class MainGameScreen extends ConsumerStatefulWidget {
   ConsumerState<MainGameScreen> createState() => _MainGameScreenState();
 }
 
-class _MainGameScreenState extends ConsumerState<MainGameScreen> {
+class _MainGameScreenState extends ConsumerState<MainGameScreen>
+    with TickerProviderStateMixin {
   late final GalacticGame _galacticGame;
   BannerAd? _bannerAd;
   bool _isBannerAdLoaded = false;
@@ -47,6 +56,19 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
   Timer? _feverTimer;
   Timer? _bossIncursionTimer;
 
+  // Live In-Game Event: Golden UFO
+  late final AnimationController _ufoAnimController;
+  late final Animation<double> _ufoAnimation;
+  bool _isUfoVisible = false;
+  Timer? _ufoSpawnTimer;
+  Timer? _initialUfoTimer;
+
+  // Live In-Game Event: Golden Comet
+  late final AnimationController _cometAnimController;
+  late final Animation<double> _cometAnimation;
+  bool _isCometVisible = false;
+  Timer? _cometSpawnTimer;
+  Timer? _initialCometTimer;
 
   @override
   void initState() {
@@ -85,6 +107,61 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
       },
     );
 
+    // Setup Golden UFO Animation & Spawner
+    _ufoAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 9),
+    );
+    _ufoAnimation = Tween<double>(begin: -70.0, end: 380.0).animate(
+      CurvedAnimation(parent: _ufoAnimController, curve: Curves.easeInOut),
+    );
+    _ufoAnimController.addStatusListener((status) {
+      if (status == AnimationStatus.completed && mounted) {
+        setState(() => _isUfoVisible = false);
+      }
+    });
+
+    _ufoSpawnTimer = Timer.periodic(const Duration(seconds: 80), (_) {
+      if (mounted && !_isModalOpen && !_isUfoVisible) {
+        setState(() => _isUfoVisible = true);
+        _ufoAnimController.forward(from: 0.0);
+      }
+    });
+    // First UFO fly-by after 25s
+    _initialUfoTimer = Timer(const Duration(seconds: 25), () {
+      if (mounted && !_isModalOpen && !_isUfoVisible) {
+        setState(() => _isUfoVisible = true);
+        _ufoAnimController.forward(from: 0.0);
+      }
+    });
+
+    // Setup Golden Comet Animation & Spawner
+    _cometAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 5),
+    );
+    _cometAnimation = Tween<double>(begin: -80.0, end: 400.0).animate(
+      CurvedAnimation(parent: _cometAnimController, curve: Curves.linear),
+    );
+    _cometAnimController.addStatusListener((status) {
+      if (status == AnimationStatus.completed && mounted) {
+        setState(() => _isCometVisible = false);
+      }
+    });
+
+    _cometSpawnTimer = Timer.periodic(const Duration(seconds: 130), (_) {
+      if (mounted && !_isModalOpen && !_isCometVisible) {
+        setState(() => _isCometVisible = true);
+        _cometAnimController.forward(from: 0.0);
+      }
+    });
+    // First Comet streak after 50s
+    _initialCometTimer = Timer(const Duration(seconds: 50), () {
+      if (mounted && !_isModalOpen && !_isCometVisible) {
+        setState(() => _isCometVisible = true);
+        _cometAnimController.forward(from: 0.0);
+      }
+    });
 
     // Periodic Mystery Cosmic Cargo Crate Drops (Every 90 seconds)
     _cargoDropTimer = Timer.periodic(const Duration(seconds: 90), (_) {
@@ -92,7 +169,6 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
         ref.read(gameStateProvider.notifier).dropMysteryCargo();
       }
     });
-
 
     // Real-time Fever, Boss, and VIP Drone Auto-Collector ticker (100ms interval)
     int tickCount = 0;
@@ -139,15 +215,71 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
     _bannerAd?.load();
   }
 
+  void _onUfoTapped(GameState gameState) {
+    _ufoAnimController.stop();
+    setState(() => _isUfoVisible = false);
+
+    const double approxTrackLength = 1400.0;
+    final double totalFleetPerSec = gameState.trackShips.fold<double>(
+      0.0,
+      (sum, s) =>
+          sum + (s.calculateIncomePayout() * (s.baseSpeed / approxTrackLength)),
+    );
+
+    _openGameModal((ctx) => MysteryCardModal(
+          fleetIncomePerLap: max(20.0, totalFleetPerSec),
+          highestTierUnlocked: gameState.highestTierUnlocked,
+          onRewardChosen: (reward, {bool doubleWithAd = false}) {
+            ref
+                .read(gameStateProvider.notifier)
+                .applyMysteryCardReward(reward, doubleWithAd: doubleWithAd);
+          },
+        ));
+  }
+
+  void _onCometTapped(GameState gameState) {
+    _cometAnimController.stop();
+    setState(() => _isCometVisible = false);
+
+    const double approxTrackLength = 1400.0;
+    final double totalFleetPerSec = gameState.trackShips.fold<double>(
+      0.0,
+      (sum, s) =>
+          sum + (s.calculateIncomePayout() * (s.baseSpeed / approxTrackLength)),
+    );
+
+    _openGameModal((ctx) => CometRushModal(
+          fleetIncomePerLap: max(20.0, totalFleetPerSec),
+          onSessionComplete: ({
+            required int taps,
+            required double scoreMultiplier,
+            bool doubleWithAd = false,
+          }) {
+            ref.read(gameStateProvider.notifier).completeCometRushSession(
+                  taps: taps,
+                  scoreMultiplier: scoreMultiplier,
+                  doubleWithAd: doubleWithAd,
+                );
+          },
+        ));
+  }
 
   @override
   void dispose() {
     _cargoDropTimer?.cancel();
     _feverTimer?.cancel();
     _bossIncursionTimer?.cancel();
+    _ufoSpawnTimer?.cancel();
+    _initialUfoTimer?.cancel();
+    _cometSpawnTimer?.cancel();
+    _initialCometTimer?.cancel();
+    _ufoAnimController.dispose();
+    _cometAnimController.dispose();
     _bannerAd?.dispose();
     super.dispose();
   }
+
+
 
   Future<void> _openGameModal(WidgetBuilder builder) async {
     _isModalOpen = true;
@@ -261,14 +393,17 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
     final adState = ref.watch(adStateProvider);
 
 
-    // Sync active track ships, active boss, and fever mode with Flame Game engine
+    // Sync active track ships, active boss, fever mode, and sector theme with Flame Game engine
     _galacticGame.updateShips(gameState.trackShips);
-
     _galacticGame.updateBoss(gameState.activeBoss);
     _galacticGame.setSpeedMultiplier(
       adState.isSpeedBoostActive ? 2.0 : 1.0,
       isFever: gameState.isFeverActive,
     );
+    _galacticGame.updateSectorTheme(
+      SectorThemeModel.getThemeForSector(gameState.career.sectorLevel),
+    );
+
 
 
     // Base drop tier & discount calculations for store
@@ -324,7 +459,7 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
             ),
 
 
-            // 5. Center Flame Canvas (Racetrack)
+            // 5. Center Flame Canvas (Racetrack with Live In-Game Events)
             Expanded(
               flex: 7,
               child: Container(
@@ -348,12 +483,95 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
                   ],
                 ),
                 clipBehavior: Clip.antiAlias,
-                child: GameWidget(
-                  key: const ValueKey('galactic_flame_game_canvas'),
-                  game: _galacticGame,
+                child: Stack(
+                  children: [
+                    GameWidget(
+                      key: const ValueKey('galactic_flame_game_canvas'),
+                      game: _galacticGame,
+                    ),
+
+                    // Live Animated Golden UFO Event
+                    if (_isUfoVisible)
+                      AnimatedBuilder(
+                        animation: _ufoAnimation,
+                        builder: (context, child) {
+                          return Positioned(
+                            left: _ufoAnimation.value,
+                            top: 20.0 + sin(_ufoAnimController.value * 4 * pi) * 14.0,
+                            child: GestureDetector(
+                              onTap: () => _onUfoTapped(gameState),
+                              child: Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: const Color(0xFFFFD700)
+                                      .withAlpha((0.25 * 255).round()),
+                                  border: Border.all(
+                                      color: const Color(0xFFFFD700),
+                                      width: 1.5),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFFFFD700)
+                                          .withAlpha((0.5 * 255).round()),
+                                      blurRadius: 16,
+                                      spreadRadius: 2,
+                                    ),
+                                  ],
+                                ),
+                                child: Image.asset(
+                                  'assets/kenney_space-shooter-remastered/PNG/ufoYellow.png',
+                                  width: 34,
+                                  height: 34,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+
+                    // Live Animated Golden Comet Event
+                    if (_isCometVisible)
+                      AnimatedBuilder(
+                        animation: _cometAnimation,
+                        builder: (context, child) {
+                          return Positioned(
+                            left: _cometAnimation.value,
+                            top: 15.0 + (_cometAnimController.value * 70.0),
+                            child: GestureDetector(
+                              onTap: () => _onCometTapped(gameState),
+                              child: Transform.rotate(
+                                angle: 0.45,
+                                child: Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(0xFFFF0055)
+                                            .withAlpha((0.6 * 255).round()),
+                                        blurRadius: 20,
+                                        spreadRadius: 4,
+                                      ),
+                                    ],
+                                  ),
+                                  child: Image.asset(
+                                    'assets/kenney_space-shooter-remastered/PNG/Power-ups/powerupYellow_bolt.png',
+                                    width: 36,
+                                    height: 36,
+                                    fit: BoxFit.contain,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                  ],
                 ),
               ),
             ),
+
 
             // 6. Interactive 4x4 Merge Grid UI
             Expanded(
@@ -506,8 +724,30 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
                   ),
                 ],
               ),
+
+              // Settings & Lifetime Dossier Button (Gear Icon)
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () {
+                  _openGameModal((ctx) => const SettingsModal());
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: Colors.white10,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  child: const Icon(
+                    Icons.settings_rounded,
+                    color: Colors.white70,
+                    size: 16,
+                  ),
+                ),
+              ),
             ],
           ),
+
 
           const SizedBox(height: 8),
 
@@ -680,7 +920,65 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
 
               const SizedBox(width: 4),
 
-              // 4. Galactic Prestige Button
+              // 4. Milestone Trophy Achievements Button
+              Expanded(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () {
+                    _openGameModal((ctx) => const AchievementsModal());
+                  },
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFD700)
+                          .withAlpha((0.20 * 255).round()),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                          color: const Color(0xFFFFD700), width: 1.2),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.emoji_events_rounded,
+                          color: Color(0xFFFFD700),
+                          size: 13,
+                        ),
+                        const SizedBox(width: 2),
+                        const Flexible(
+                          child: Text(
+                            'TROPHY',
+                            style: TextStyle(
+                              color: Color(0xFFFFD700),
+                              fontSize: 9.0,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.2,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        ),
+                        if (state.unclaimedAchievementsCount > 0) ...[
+                          const SizedBox(width: 3),
+                          Container(
+                            width: 5,
+                            height: 5,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF00FF88),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 4),
+
+              // 5. Galactic Prestige Button
               Expanded(
                 child: InkWell(
                   borderRadius: BorderRadius.circular(10),
@@ -736,6 +1034,7 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
                   ),
                 ),
               ),
+
 
             ],
           ),

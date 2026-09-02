@@ -61,6 +61,18 @@ class StorageService {
     return GameState.initial();
   }
 
+
+  /// Clear all saved data from storage
+  static Future<void> clearAll() async {
+    try {
+      _prefs ??= await SharedPreferences.getInstance();
+      await _prefs!.clear();
+    } catch (e) {
+      debugPrint('[StorageService] Error clearing state: $e');
+    }
+  }
+
+
   /// Calculate offline earnings since last session
   static OfflineEarningsResult calculateOfflineEarnings(GameState state) {
     final int now = DateTime.now().millisecondsSinceEpoch;

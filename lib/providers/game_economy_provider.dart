@@ -10,11 +10,12 @@ import '../models/expedition_model.dart';
 import '../models/daily_login_model.dart';
 import '../models/store_item_model.dart';
 import '../models/skill_node_model.dart';
-
-
+import '../models/achievement_model.dart';
+import '../models/mystery_card_model.dart';
 import '../models/career_model.dart';
 import '../services/sound_service.dart';
 import '../services/storage_service.dart';
+
 
 
 
@@ -1222,12 +1223,182 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     return false;
   }
 
+  /// Claims reward from an unlocked milestone achievement
+  bool claimAchievement(String achievementId) {
+    final int index =
+        state.achievements.indexWhere((a) => a.id == achievementId);
+    if (index == -1) return false;
 
+    final achievement = state.achievements[index];
+    if (!achievement.canClaim) return false;
 
+    // Award Dark Matter, Credits, Relic Shards
+    final double newDm = state.darkMatter + achievement.rewardDarkMatter;
+    final double newCredits = state.credits + achievement.rewardCredits;
+    final double newLifetime =
+        state.lifetimeCredits + achievement.rewardCredits;
 
+    if (achievement.rewardRelicShards > 0 && state.relics.isNotEmpty) {
+      final randomRelic = state.relics[Random().nextInt(state.relics.length)];
+      awardRelicShards(randomRelic.id, achievement.rewardRelicShards);
+    }
+
+    final updatedAchievements = List<AchievementModel>.from(state.achievements);
+    updatedAchievements[index] = achievement.copyWith(isClaimed: true);
+
+    state = state.copyWith(
+      darkMatter: newDm,
+      credits: newCredits,
+      lifetimeCredits: newLifetime,
+      achievements: updatedAchievements,
+    );
+
+    _soundService.playPrestigeSound();
+    _autoSaveDebounced();
+    return true;
+  }
+
+  /// Applies reward chosen from Golden UFO 3-Card Mystery Pick
+  void applyMysteryCardReward(MysteryCardReward reward,
+      {bool doubleWithAd = false}) {
+    final double multiplier = doubleWithAd ? 2.0 : 1.0;
+
+    switch (reward.type) {
+      case MysteryRewardType.coinSurge:
+        final double earned =
+            reward.creditsValue * multiplier * relicIncomeMultiplier;
+        state = state.copyWith(
+          credits: state.credits + earned,
+          lifetimeCredits: state.lifetimeCredits + earned,
+        );
+        break;
+
+      case MysteryRewardType.crateAirdrop:
+        final int totalCrates = (reward.crateCount * multiplier).round();
+        for (int i = 0; i < totalCrates; i++) {
+          dropMysteryCargo(tier: reward.crateTier);
+        }
+        break;
+
+      case MysteryRewardType.darkMatterGems:
+        final double dm = reward.darkMatterValue * multiplier;
+        state = state.copyWith(
+          darkMatter: state.darkMatter + dm,
+        );
+        break;
+
+      case MysteryRewardType.droneOverdrive:
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final int currentBase = max(now, state.droneRentalExpiryEpoch);
+        final int bonusMillis = (reward.droneSeconds * 1000 * multiplier).round();
+        state = state.copyWith(
+          droneRentalExpiryEpoch: currentBase + bonusMillis,
+        );
+        break;
+    }
+
+    _evaluateAchievements();
+    _soundService.playPrestigeSound();
+    _autoSaveDebounced();
+  }
+
+  /// Processes completion of a 10-second Comet Rush mini-game session
+  void completeCometRushSession({
+    required int taps,
+    required double scoreMultiplier,
+    bool doubleWithAd = false,
+  }) {
+    if (taps <= 0) return;
+
+    final double multiplier = doubleWithAd ? 2.0 : 1.0;
+
+    // Approximate active fleet income per lap
+    const double approxTrackLength = 1400.0;
+    final double totalFleetPerSec = state.trackShips.fold<double>(
+      0.0,
+      (sum, s) =>
+          sum +
+          (s.calculateIncomePayout() * (s.baseSpeed / approxTrackLength)),
+    );
+    final double effectivePerSec = max(20.0, totalFleetPerSec);
+
+    // Dynamic coin prize scaling with taps + score multiplier
+    final double coinPrize =
+        effectivePerSec * (15.0 + (taps * 1.5)) * scoreMultiplier * multiplier;
+
+    // Bonus Dark Matter for high-score performance
+    double bonusDm = 0.0;
+    if (taps >= 15) bonusDm += 3.0;
+    if (taps >= 30) bonusDm += 7.0;
+    if (taps >= 45) bonusDm += 15.0;
+    bonusDm *= multiplier;
+
+    // Bonus Lucky Wheel Spin for 25+ taps
+    int extraSpins = 0;
+    if (taps >= 25) extraSpins += (doubleWithAd ? 2 : 1);
+
+    state = state.copyWith(
+      credits: state.credits + coinPrize,
+      lifetimeCredits: state.lifetimeCredits + coinPrize,
+      darkMatter: state.darkMatter + bonusDm,
+      extraSpinsCount: state.extraSpinsCount + extraSpins,
+    );
+
+    _evaluateAchievements();
+    _soundService.playPrestigeSound();
+    _autoSaveDebounced();
+  }
+
+  /// Automatically updates progress across all 20 Milestone Achievements
+  void _evaluateAchievements() {
+    final int merges = state.totalMergesCount;
+    final int highestTier = state.highestTierUnlocked;
+    final double lifetimeCoins = state.lifetimeCredits;
+    final int bossKills = state.career.totalBossesDefeated;
+    final int spins = state.career.totalWheelSpins;
+    final int expeditionsCount = state.career.totalExpeditionsCompleted;
+    final int prestige = state.career.prestigeCount;
+    final int unlockedRelics =
+        state.relics.where((r) => r.level > 0).length;
+
+    final updatedAchievements = state.achievements.map((ach) {
+      if (ach.isClaimed) return ach;
+
+      double currentVal = ach.currentProgress;
+      switch (ach.category) {
+        case AchievementCategory.merges:
+          currentVal = merges.toDouble();
+          break;
+        case AchievementCategory.shipTier:
+          currentVal = highestTier.toDouble();
+          break;
+        case AchievementCategory.bossDefeat:
+          currentVal = bossKills.toDouble();
+          break;
+        case AchievementCategory.coinsEarned:
+          currentVal = lifetimeCoins;
+          break;
+        case AchievementCategory.wheelSpins:
+          currentVal = spins.toDouble();
+          break;
+        case AchievementCategory.expeditions:
+          currentVal = expeditionsCount.toDouble();
+          break;
+        case AchievementCategory.prestige:
+          currentVal = prestige.toDouble();
+          break;
+        case AchievementCategory.relics:
+          currentVal = unlockedRelics.toDouble();
+          break;
+      }
+
+      return ach.copyWith(currentProgress: currentVal);
+    }).toList();
+
+    state = state.copyWith(achievements: updatedAchievements);
+  }
 
   /// Evaluates and advances missions based on actions
-
   List<MissionModel> _evaluateMissions(
     List<MissionModel> currentMissions, {
     int mergesIncrement = 0,
@@ -1268,3 +1439,4 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     StorageService.saveGameState(state);
   }
 }
+

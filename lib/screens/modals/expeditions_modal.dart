@@ -352,35 +352,45 @@ class _ExpeditionsModalState extends ConsumerState<ExpeditionsModal> {
               color: GameTheme.backgroundVoid,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _buildRewardBadge(
-                  Icons.monetization_on_rounded,
-                  '${NumberFormatter.formatCredits(sector.baseCreditsMultiplier, decimals: 0)}x MIN',
-                  const Color(0xFFFFD700),
-                ),
-                if (sector.darkMatterReward > 0)
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
                   _buildRewardBadge(
-                    Icons.auto_awesome_rounded,
-                    '+${sector.darkMatterReward.toInt()} DM',
-                    const Color(0xFF9D4EDD),
+                    Icons.monetization_on_rounded,
+                    '${NumberFormatter.formatCredits(sector.baseCreditsMultiplier, decimals: 0)}x MIN',
+                    const Color(0xFFFFD700),
                   ),
-                if (sector.relicShardsReward > 0)
-                  _buildRewardBadge(
-                    Icons.diamond_rounded,
-                    '+${sector.relicShardsReward} Shards',
-                    const Color(0xFF00F0FF),
-                  ),
-                if (sector.bonusBlueprintTier > 0)
-                  _buildRewardBadge(
-                    Icons.inventory_2_rounded,
-                    'T${sector.bonusBlueprintTier} Crate',
-                    const Color(0xFFFF0055),
-                  ),
-              ],
+                  const SizedBox(width: 8),
+                  if (sector.darkMatterReward > 0) ...[
+                    _buildRewardBadge(
+                      Icons.auto_awesome_rounded,
+                      '+${sector.darkMatterReward.toInt()} DM',
+                      const Color(0xFF9D4EDD),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  if (sector.relicShardsReward > 0) ...[
+                    _buildRewardBadge(
+                      Icons.diamond_rounded,
+                      '+${sector.relicShardsReward} Shards',
+                      const Color(0xFF00F0FF),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  if (sector.bonusBlueprintTier > 0)
+                    _buildRewardBadge(
+                      Icons.inventory_2_rounded,
+                      'T${sector.bonusBlueprintTier} Crate',
+                      const Color(0xFFFF0055),
+                    ),
+                ],
+              ),
             ),
           ),
+
           const SizedBox(height: 10),
 
           // Action Status Deck

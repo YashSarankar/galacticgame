@@ -1,19 +1,47 @@
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Service managing audio playback cues and haptic feedback.
 class SoundService {
   static final SoundService _instance = SoundService._internal();
   factory SoundService() => _instance;
-  SoundService._internal();
+  SoundService._internal() {
+    _loadPreferences();
+  }
 
   bool isMuted = false;
   bool isHapticsEnabled = true;
+
+  Future<void> _loadPreferences() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      isMuted = prefs.getBool('pref_sound_muted') ?? false;
+      isHapticsEnabled = prefs.getBool('pref_haptics_enabled') ?? true;
+    } catch (_) {}
+  }
+
+  Future<void> setMuted(bool muted) async {
+    isMuted = muted;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('pref_sound_muted', muted);
+    } catch (_) {}
+  }
+
+  Future<void> setHapticsEnabled(bool enabled) async {
+    isHapticsEnabled = enabled;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('pref_haptics_enabled', enabled);
+    } catch (_) {}
+  }
 
   /// Trigger haptic feedback for merge shockwave
   void playMergeHaptic() {
     if (!isHapticsEnabled) return;
     HapticFeedback.heavyImpact();
   }
+
 
   /// Trigger haptic for income line crossing
   void playCrossingHaptic() {

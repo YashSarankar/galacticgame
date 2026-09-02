@@ -3,7 +3,12 @@ import 'package:galacticgame/models/game_state.dart';
 import 'package:galacticgame/models/ship_model.dart';
 import 'package:galacticgame/models/roulette_reward_model.dart';
 import 'package:galacticgame/models/store_item_model.dart';
+import 'package:galacticgame/models/mystery_card_model.dart';
+import 'package:galacticgame/models/sector_theme_model.dart';
+import 'package:galacticgame/services/sound_service.dart';
 import 'package:galacticgame/providers/game_economy_provider.dart';
+
+
 
 
 
@@ -345,8 +350,122 @@ void main() {
       final crateRemaining = notifier.state.gridSlots.any((s) => s != null && s.isBox);
       expect(crateRemaining, false); // Opened into a ship!
     });
+
+    test('Milestone Trophy Achievements: Evaluation, progress tracking, and claiming Dark Matter', () {
+      final notifier = GameEconomyNotifier(GameState.initial());
+      expect(notifier.state.achievements.length, 20);
+      expect(notifier.state.unclaimedAchievementsCount, 0);
+
+      // 1. Trigger merge achievement (Novice Commander: 10 merges)
+      // Manually set 10 merges and evaluate
+      notifier.state = notifier.state.copyWith(totalMergesCount: 10);
+      notifier.claimDailyLoginReward(); // Triggers auto-evaluation / save
+      
+      // Set progress to target to test claim
+      final updatedList = notifier.state.achievements.map((a) {
+        if (a.id == 'merge_10') return a.copyWith(currentProgress: 10);
+        return a;
+      }).toList();
+      notifier.state = notifier.state.copyWith(achievements: updatedList);
+
+
+      expect(notifier.state.unclaimedAchievementsCount, 1);
+      final initialDm = notifier.state.darkMatter;
+      final claimed = notifier.claimAchievement('merge_10');
+      expect(claimed, true);
+      expect(notifier.state.darkMatter, initialDm + 5.0); // +5 DM reward
+      expect(notifier.state.unclaimedAchievementsCount, 0);
+
+      // Cannot claim twice
+      final secondClaim = notifier.claimAchievement('merge_10');
+      expect(secondClaim, false);
+    });
+
+    test('Live Events: Golden UFO 3-Card Mystery Pick and Comet Rush mini-game session payouts', () {
+      final notifier = GameEconomyNotifier(GameState.initial().copyWith(credits: 500.0));
+
+      // 1. UFO Card Pick: Generate 3 cards & apply coin card
+      final cards = MysteryCardReward.generateThreeCards(
+        fleetIncomePerLap: 50.0,
+        highestTierUnlocked: 3,
+      );
+      expect(cards.length, 3);
+
+      const coinCard = MysteryCardReward(
+        type: MysteryRewardType.coinSurge,
+        title: 'Mega Coin Surge',
+        description: 'Instant Cash',
+        iconAsset: '',
+        colorValue: 0,
+        creditsValue: 1000.0,
+      );
+
+      final prevCredits = notifier.state.credits;
+      notifier.applyMysteryCardReward(coinCard);
+      expect(notifier.state.credits, prevCredits + 1000.0);
+
+
+      // 2. UFO Card Pick: Dark Matter with 2X Double Claim (Ad)
+      final dmCard = const MysteryCardReward(
+        type: MysteryRewardType.darkMatterGems,
+        title: 'DM Pouch',
+        description: 'Free Gems',
+        iconAsset: '',
+        colorValue: 0,
+        darkMatterValue: 10.0,
+      );
+      final prevDm = notifier.state.darkMatter;
+      notifier.applyMysteryCardReward(dmCard, doubleWithAd: true);
+      expect(notifier.state.darkMatter, prevDm + 20.0); // Doubled from 10 to 20!
+
+      // 3. Comet Rush Session Completion: 30 Taps + High Score
+      final preCometCredits = notifier.state.credits;
+      final preCometSpins = notifier.state.extraSpinsCount;
+      notifier.completeCometRushSession(
+        taps: 30,
+        scoreMultiplier: 2.5,
+        doubleWithAd: true,
+      );
+      expect(notifier.state.credits > preCometCredits, true);
+      expect(notifier.state.extraSpinsCount > preCometSpins, true); // Earned bonus wheel spin!
+    });
+
+    test('SectorThemeModel: Dynamic theme progression across planetary sectors', () {
+      final themeS1 = SectorThemeModel.getThemeForSector(1);
+      final themeS3 = SectorThemeModel.getThemeForSector(3);
+      final themeS5 = SectorThemeModel.getThemeForSector(5);
+      final themeS7 = SectorThemeModel.getThemeForSector(7);
+      final themeS9 = SectorThemeModel.getThemeForSector(9);
+
+      expect(themeS1.sectorName.contains('Orion'), true);
+      expect(themeS3.sectorName.contains('Solar'), true);
+      expect(themeS5.sectorName.contains('Cygnus'), true);
+      expect(themeS7.sectorName.contains('Hyperion'), true);
+      expect(themeS9.sectorName.contains('Cosmic'), true);
+
+      // Verify colors evolve distinctly
+      expect(themeS1.trackPrimaryGlow != themeS3.trackPrimaryGlow, true);
+      expect(themeS3.trackPrimaryGlow != themeS5.trackPrimaryGlow, true);
+    });
+
+    test('SoundService: Sound & Haptic toggle preference mutations', () async {
+      final soundService = SoundService();
+      await soundService.setMuted(true);
+      expect(soundService.isMuted, true);
+
+      await soundService.setMuted(false);
+      expect(soundService.isMuted, false);
+
+      await soundService.setHapticsEnabled(false);
+      expect(soundService.isHapticsEnabled, false);
+
+      await soundService.setHapticsEnabled(true);
+      expect(soundService.isHapticsEnabled, true);
+    });
   });
 }
+
+
 
 
 

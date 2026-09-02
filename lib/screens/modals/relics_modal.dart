@@ -229,14 +229,19 @@ class RelicsModal extends ConsumerWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      relic.name,
-                      style: TextStyle(
-                        color: isUnlocked ? Colors.white : Colors.white54,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w900,
+                    Expanded(
+                      child: Text(
+                        relic.name,
+                        style: TextStyle(
+                          color: isUnlocked ? Colors.white : Colors.white54,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w900,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    const SizedBox(width: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 6, vertical: 1.5),
@@ -264,8 +269,11 @@ class RelicsModal extends ConsumerWidget {
                     color: Colors.white70,
                     fontSize: 9.5,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 6),
+
 
                 // Shards Progress
                 Row(

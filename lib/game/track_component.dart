@@ -2,14 +2,20 @@ import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flame/components.dart';
 import 'package:flutter/material.dart';
+import '../models/sector_theme_model.dart';
 
-/// Racetrack component rendering glowing neon cybernetic circuit and cosmic grid.
+/// Racetrack component rendering glowing neon cybernetic circuit and dynamic sector atmosphere.
 class TrackComponent extends PositionComponent {
   ui.PathMetric? pathMetric;
   double trackLength = 0.0;
   final Path _trackPath = Path();
+  SectorThemeModel theme = SectorThemeModel.getThemeForSector(1);
 
   TrackComponent({required Vector2 size}) : super(size: size);
+
+  void updateTheme(SectorThemeModel newTheme) {
+    theme = newTheme;
+  }
 
   @override
   void onGameResize(Vector2 size) {
@@ -17,7 +23,6 @@ class TrackComponent extends PositionComponent {
     this.size = size;
     _buildTrackPath();
   }
-
 
   @override
   void onLoad() {
@@ -71,9 +76,9 @@ class TrackComponent extends PositionComponent {
 
     if (_trackPath.getBounds().isEmpty) return;
 
-    // 2. Track Base Outer Glow
+    // 2. Track Base Dynamic Outer Glow
     final outerGlowPaint = Paint()
-      ..color = const Color(0xFF00F0FF).withAlpha((0.25 * 255).round())
+      ..color = theme.trackPrimaryGlow.withAlpha((0.28 * 255).round())
       ..style = PaintingStyle.stroke
       ..strokeWidth = 32.0
       ..maskFilter = const MaskFilter.blur(BlurStyle.solid, 16.0);
@@ -86,18 +91,19 @@ class TrackComponent extends PositionComponent {
       ..strokeWidth = 28.0;
     canvas.drawPath(_trackPath, lanePaint);
 
-    // 4. Track Dual Neon Borders (Outer & Inner Cyan Rails)
+    // 4. Track Dual Neon Borders (Dynamic Sector Rail Colors)
     final railOuterPaint = Paint()
-      ..color = const Color(0xFF00F0FF).withAlpha((0.6 * 255).round())
+      ..color = theme.trackPrimaryGlow.withAlpha((0.65 * 255).round())
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
     canvas.drawPath(_trackPath, railOuterPaint);
 
     // 5. Track Center Dashed Neon Guide Line
     final centerLinePaint = Paint()
-      ..color = const Color(0xFF9D4EDD).withAlpha((0.4 * 255).round())
+      ..color = theme.spaceDustColor.withAlpha((0.45 * 255).round())
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
     canvas.drawPath(_trackPath, centerLinePaint);
   }
 }
+

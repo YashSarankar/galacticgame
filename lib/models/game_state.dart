@@ -4,6 +4,7 @@ import 'career_model.dart';
 import 'boss_model.dart';
 import 'relic_model.dart';
 import 'expedition_model.dart';
+import 'achievement_model.dart';
 
 /// Complete persistent state of the Galactic Merge Idle game.
 class GameState {
@@ -28,6 +29,7 @@ class GameState {
   final List<ShipModel> trackShips; // Active ships racing on Flame track
   final List<RelicModel> relics; // Discovered Ancient Alien Relics
   final List<ExpeditionMission> expeditions; // Active & completed deep space sorties
+  final List<AchievementModel> achievements; // Milestone trophies
   final int currentLoginDay; // 1 to 7 for Commander Login Track
   final int lastLoginClaimEpoch; // Timestamp of last claimed daily reward
   final bool isDronePermanent; // VIP Drone lifetime AI license
@@ -57,6 +59,7 @@ class GameState {
     required this.trackShips,
     required this.relics,
     this.expeditions = const [],
+    this.achievements = const [],
     this.currentLoginDay = 1,
     this.lastLoginClaimEpoch = 0,
     this.isDronePermanent = false,
@@ -64,6 +67,7 @@ class GameState {
     this.unlockedPermanentBoosters = const [],
     required this.career,
   });
+
 
   bool get canSpinFree {
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -96,6 +100,10 @@ class GameState {
   int get readyExpeditionsCount =>
       expeditions.where((e) => e.isReadyToClaim).length;
 
+  /// Number of unlocked achievements ready for Dark Matter collection
+  int get unclaimedAchievementsCount =>
+      achievements.where((a) => a.canClaim).length;
+
   /// Factory for fresh game state
   factory GameState.initial() {
     final List<ShipModel?> slots = List.generate(16, (index) => null);
@@ -127,6 +135,8 @@ class GameState {
       gridSlots: slots,
       trackShips: [ShipModel.create(1)],
       relics: RelicModel.getInitialRelics(),
+      expeditions: const [],
+      achievements: AchievementModel.createInitialList(),
       career: CareerModel.initial(),
     );
   }
@@ -160,6 +170,7 @@ class GameState {
     List<ShipModel>? trackShips,
     List<RelicModel>? relics,
     List<ExpeditionMission>? expeditions,
+    List<AchievementModel>? achievements,
     int? currentLoginDay,
     int? lastLoginClaimEpoch,
     bool? isDronePermanent,
@@ -190,6 +201,7 @@ class GameState {
       trackShips: trackShips ?? this.trackShips,
       relics: relics ?? this.relics,
       expeditions: expeditions ?? this.expeditions,
+      achievements: achievements ?? this.achievements,
       currentLoginDay: currentLoginDay ?? this.currentLoginDay,
       lastLoginClaimEpoch: lastLoginClaimEpoch ?? this.lastLoginClaimEpoch,
       isDronePermanent: isDronePermanent ?? this.isDronePermanent,
@@ -218,6 +230,7 @@ class GameState {
       'trackShips': trackShips.map((s) => s.toJson()).toList(),
       'relics': relics.map((r) => r.toJson()).toList(),
       'expeditions': expeditions.map((e) => e.toJson()).toList(),
+      'achievements': achievements.map((a) => a.toJson()).toList(),
       'currentLoginDay': currentLoginDay,
       'lastLoginClaimEpoch': lastLoginClaimEpoch,
       'isDronePermanent': isDronePermanent,
@@ -227,8 +240,30 @@ class GameState {
     };
   }
 
-
   factory GameState.fromJson(Map<String, dynamic> json) {
+    // Hydrate achievements with base catalog defaults
+    final List<AchievementModel> baseAchievements =
+        AchievementModel.createInitialList();
+    List<AchievementModel> loadedAchievements = baseAchievements;
+
+    if (json['achievements'] != null) {
+      final savedList = (json['achievements'] as List)
+          .cast<Map<String, dynamic>>();
+      loadedAchievements = baseAchievements.map((base) {
+        final saved = savedList.firstWhere(
+          (s) => s['id'] == base.id,
+          orElse: () => <String, dynamic>{},
+        );
+        if (saved.isNotEmpty) {
+          return base.copyWith(
+            currentProgress: (saved['currentProgress'] as num?)?.toDouble() ?? 0.0,
+            isClaimed: saved['isClaimed'] as bool? ?? false,
+          );
+        }
+        return base;
+      }).toList();
+    }
+
     return GameState(
       credits: (json['credits'] as num?)?.toDouble() ?? 0.0,
       lifetimeCredits: (json['lifetimeCredits'] as num?)?.toDouble() ?? 0.0,
@@ -270,6 +305,7 @@ class GameState {
               .map((e) => ExpeditionMission.fromJson(e as Map<String, dynamic>))
               .toList()
           : const [],
+      achievements: loadedAchievements,
       currentLoginDay: json['currentLoginDay'] as int? ?? 1,
       lastLoginClaimEpoch: json['lastLoginClaimEpoch'] as int? ?? 0,
       isDronePermanent: json['isDronePermanent'] as bool? ?? false,
@@ -282,6 +318,7 @@ class GameState {
           : CareerModel.initial(),
     );
   }
+
 
 
 
