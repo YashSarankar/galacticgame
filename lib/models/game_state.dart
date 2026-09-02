@@ -21,6 +21,8 @@ class GameState {
   final String lastComboMessage; // e.g. "3X ULTRA COMBO!"
   final BossModel? activeBoss; // Active Alien Dreadnought Incursion
   final int lastSaveTimestamp; // Epoch milliseconds for offline earnings math
+  final int lastFreeSpinTimestamp; // Epoch millis of last daily free spin
+  final int extraSpinsCount; // Stored extra spins from ads or boss kills
   final List<ShipModel?> gridSlots; // 16 items for 4x4 matrix
   final List<ShipModel> trackShips; // Active ships racing on Flame track
   final List<RelicModel> relics; // Discovered Ancient Alien Relics
@@ -42,11 +44,19 @@ class GameState {
     this.lastComboMessage = '',
     this.activeBoss,
     required this.lastSaveTimestamp,
+    this.lastFreeSpinTimestamp = 0,
+    this.extraSpinsCount = 1, // 1 free starter spin!
     required this.gridSlots,
     required this.trackShips,
     required this.relics,
     required this.career,
   });
+
+  bool get canSpinFree {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    return (now - lastFreeSpinTimestamp) >= (24 * 60 * 60 * 1000) ||
+        extraSpinsCount > 0;
+  }
 
   /// Factory for fresh game state
   factory GameState.initial() {
@@ -69,12 +79,15 @@ class GameState {
       lastMergeTimestamp: 0,
       lastComboMessage: '',
       lastSaveTimestamp: DateTime.now().millisecondsSinceEpoch,
+      lastFreeSpinTimestamp: 0,
+      extraSpinsCount: 1,
       gridSlots: slots,
       trackShips: [ShipModel.create(1)],
       relics: RelicModel.getInitialRelics(),
       career: CareerModel.initial(),
     );
   }
+
 
 
   /// Calculates potential Dark Matter on Galactic Reset: 150 * sqrt(Lifetime / 1e7)
@@ -100,6 +113,8 @@ class GameState {
     BossModel? activeBoss,
     bool clearActiveBoss = false,
     int? lastSaveTimestamp,
+    int? lastFreeSpinTimestamp,
+    int? extraSpinsCount,
     List<ShipModel?>? gridSlots,
     List<ShipModel>? trackShips,
     List<RelicModel>? relics,
@@ -121,6 +136,9 @@ class GameState {
       lastComboMessage: lastComboMessage ?? this.lastComboMessage,
       activeBoss: clearActiveBoss ? null : (activeBoss ?? this.activeBoss),
       lastSaveTimestamp: lastSaveTimestamp ?? this.lastSaveTimestamp,
+      lastFreeSpinTimestamp:
+          lastFreeSpinTimestamp ?? this.lastFreeSpinTimestamp,
+      extraSpinsCount: extraSpinsCount ?? this.extraSpinsCount,
       gridSlots: gridSlots ?? this.gridSlots,
       trackShips: trackShips ?? this.trackShips,
       relics: relics ?? this.relics,
@@ -139,6 +157,8 @@ class GameState {
       'highestTierUnlocked': highestTierUnlocked,
       'activeBoss': activeBoss?.toJson(),
       'lastSaveTimestamp': lastSaveTimestamp,
+      'lastFreeSpinTimestamp': lastFreeSpinTimestamp,
+      'extraSpinsCount': extraSpinsCount,
       'gridSlots': gridSlots.map((s) => s?.toJson()).toList(),
       'trackShips': trackShips.map((s) => s.toJson()).toList(),
       'relics': relics.map((r) => r.toJson()).toList(),
@@ -166,6 +186,8 @@ class GameState {
           : null,
       lastSaveTimestamp: json['lastSaveTimestamp'] as int? ??
           DateTime.now().millisecondsSinceEpoch,
+      lastFreeSpinTimestamp: json['lastFreeSpinTimestamp'] as int? ?? 0,
+      extraSpinsCount: json['extraSpinsCount'] as int? ?? 1,
       gridSlots: json['gridSlots'] != null
           ? (json['gridSlots'] as List)
               .map((s) => s != null ? ShipModel.fromJson(s as Map<String, dynamic>) : null)
@@ -186,6 +208,7 @@ class GameState {
           : CareerModel.initial(),
     );
   }
+
 }
 
 

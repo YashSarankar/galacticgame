@@ -45,6 +45,15 @@ class ShipModel {
     return income * multiplier;
   }
 
+  /// Calculates boss laser strike damage scaling exponentially with ship tier:
+  /// Damage = 15.0 * (1.6 ^ (tier - 1)) * multiplier
+  /// Higher tier ships deliver devastating orbital strike power to alien bosses!
+  double calculateLaserDamage({double multiplier = 1.0}) {
+    final double tierFactor = pow(1.6, max(0, tier - 1)).toDouble();
+    return 15.0 * tierFactor * multiplier;
+  }
+
+
   /// Copy with custom parameters
   ShipModel copyWith({
     String? id,

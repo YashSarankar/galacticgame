@@ -4,7 +4,9 @@ import '../models/game_state.dart';
 import '../models/ship_model.dart';
 import '../models/boss_model.dart';
 import '../models/relic_model.dart';
+import '../models/roulette_reward_model.dart';
 import '../models/mission_model.dart';
+
 import '../models/skill_node_model.dart';
 import '../models/career_model.dart';
 import '../services/sound_service.dart';
@@ -213,6 +215,11 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
 
   /// Spawns a mystery cosmic supply crate directly onto an empty grid slot (waiting to be tapped!)
   bool dropMysteryCargo() {
+    // Prevent crate clutter: Max 1 unopened crate on grid at a time
+    final int existingCrates =
+        state.gridSlots.where((s) => s != null && s.isBox).length;
+    if (existingCrates >= 1) return false;
+
     final int unlockedLimit = maxUnlockedGridSlots;
     final List<int> emptyIndices = [];
     for (int i = 0; i < unlockedLimit; i++) {
@@ -221,6 +228,7 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
       }
     }
     if (emptyIndices.isEmpty) return false;
+
 
     final random = Random();
     final int targetSlot = emptyIndices[random.nextInt(emptyIndices.length)];
@@ -329,9 +337,22 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
       return true;
     }
 
+    // Defensive Validation: Unopened delivery crates cannot be merged
+    if (sourceShip.isBox || targetShip.isBox) {
+      newSlots[fromIndex] = targetShip;
+      newSlots[toIndex] = sourceShip;
+      state = state.copyWith(
+        gridSlots: newSlots,
+        trackShips: computeTrackFleet(newSlots),
+      );
+      _soundService.playButtonHaptic();
+      _autoSaveDebounced();
+      return true;
+    }
+
     if (sourceShip.tier == targetShip.tier) {
-      // Merge into Tier + 1
-      final int newTier = sourceShip.tier + 1;
+      // Merge into Tier + 1 (clamped to max tier 50)
+      final int newTier = min(50, sourceShip.tier + 1);
       final mergedShip = ShipModel.create(newTier);
 
       newSlots[toIndex] = mergedShip;
@@ -411,10 +432,21 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
   }
 
   /// Recycles/disassembles a ship from the grid to refund 70% of its base purchase value
+  /// Returns:
+  /// - `> 0`: refund credit amount awarded
+  /// - `0.0`: invalid slot or box
+  /// - `-1.0`: defensive protection - cannot scrap the last remaining active ship in the fleet!
   double recycleShip(int slotIndex) {
     if (slotIndex < 0 || slotIndex >= state.gridSlots.length) return 0.0;
     final ship = state.gridSlots[slotIndex];
     if (ship == null || ship.isBox) return 0.0;
+
+    // Defensive Protection: Player must always retain at least 1 active spacecraft!
+    final int activeShips =
+        state.gridSlots.where((s) => s != null && !s.isBox).length;
+    if (activeShips <= 1) {
+      return -1.0;
+    }
 
     final double refund =
         ShipModel.calculatePurchaseCost(state.totalShipsPurchased, ship.tier) *
@@ -434,6 +466,7 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     _autoSaveDebounced();
     return refund;
   }
+
 
   /// Automatically merges all available pairs on the flight deck with one tap
   int autoMergeGrid() {
@@ -604,9 +637,11 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
         : 50.0;
 
     final newBoss = BossModel.createForSector(
-      state.career.sectorLevel,
-      highestIncome,
+      sectorLevel: state.career.sectorLevel,
+      highestTierUnlocked: state.highestTierUnlocked,
+      baseIncomePerLap: highestIncome,
     );
+
 
 
     state = state.copyWith(activeBoss: newBoss);
@@ -772,9 +807,130 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     // Drop free high-tier mystery crate on flight deck
     dropMysteryCargo();
 
+    // Award 1 extra lucky spin for defeating an alien dreadnought!
+    addExtraSpin(count: 1);
+
     _soundService.playPrestigeSound();
     _autoSaveDebounced();
   }
+
+  /// Adds extra available lucky spins (from ads, boss defeats, etc.)
+  void addExtraSpin({int count = 1}) {
+    state = state.copyWith(extraSpinsCount: state.extraSpinsCount + count);
+    _autoSaveDebounced();
+  }
+
+  /// Claims reward from landing on a specific Wormhole Roulette wedge
+  void claimRouletteReward(RouletteRewardModel reward) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    int newExtraSpins = state.extraSpinsCount;
+    int newLastFree = state.lastFreeSpinTimestamp;
+
+    if (newExtraSpins > 0) {
+      newExtraSpins--;
+    } else {
+      newLastFree = now;
+    }
+
+    final double highestIncome = state.trackShips.isNotEmpty
+        ? state.trackShips.first.calculateIncomePayout()
+        : 50.0;
+
+    switch (reward.type) {
+      case RouletteRewardType.supernovaJackpot:
+        final double jackpot =
+            highestIncome * reward.valueMultiplier * relicIncomeMultiplier;
+        state = state.copyWith(
+          credits: state.credits + jackpot,
+          lifetimeCredits: state.lifetimeCredits + jackpot,
+          extraSpinsCount: newExtraSpins,
+          lastFreeSpinTimestamp: newLastFree,
+        );
+        break;
+
+      case RouletteRewardType.creditsMultiplier:
+        final double windfall =
+            highestIncome * reward.valueMultiplier * relicIncomeMultiplier;
+        state = state.copyWith(
+          credits: state.credits + windfall,
+          lifetimeCredits: state.lifetimeCredits + windfall,
+          extraSpinsCount: newExtraSpins,
+          lastFreeSpinTimestamp: newLastFree,
+        );
+        break;
+
+      case RouletteRewardType.darkMatter:
+        final double dm = reward.count * relicDarkMatterMultiplier;
+        state = state.copyWith(
+          darkMatter: state.darkMatter + dm,
+          extraSpinsCount: newExtraSpins,
+          lastFreeSpinTimestamp: newLastFree,
+        );
+        break;
+
+      case RouletteRewardType.timeWarp:
+        // Calculate 2 hours of active fleet income
+        const double approxTrackLength = 1400.0;
+        final double totalFleetPerSec = state.trackShips.fold<double>(
+          0.0,
+          (sum, s) =>
+              sum +
+              (s.calculateIncomePayout() * (s.baseSpeed / approxTrackLength)),
+        );
+        final double effectivePerSec = max(10.0, totalFleetPerSec);
+        final double warpEarnings =
+            effectivePerSec * reward.count * relicIncomeMultiplier;
+        state = state.copyWith(
+          credits: state.credits + warpEarnings,
+          lifetimeCredits: state.lifetimeCredits + warpEarnings,
+          extraSpinsCount: newExtraSpins,
+          lastFreeSpinTimestamp: newLastFree,
+        );
+        break;
+
+
+      case RouletteRewardType.feverRush:
+        state = state.copyWith(
+          isFeverActive: true,
+          feverTimeRemaining: 30.0,
+          extraSpinsCount: newExtraSpins,
+          lastFreeSpinTimestamp: newLastFree,
+        );
+        break;
+
+      case RouletteRewardType.relicShards:
+        state = state.copyWith(
+          extraSpinsCount: newExtraSpins,
+          lastFreeSpinTimestamp: newLastFree,
+        );
+        if (state.relics.isNotEmpty) {
+          final randomRelic =
+              state.relics[Random().nextInt(state.relics.length)];
+          awardRelicShards(randomRelic.id, reward.count);
+        }
+        break;
+
+      case RouletteRewardType.shipDrop:
+        state = state.copyWith(
+          extraSpinsCount: newExtraSpins,
+          lastFreeSpinTimestamp: newLastFree,
+        );
+        dropMysteryCargo();
+        break;
+
+      case RouletteRewardType.mysteryCrate:
+        state = state.copyWith(
+          extraSpinsCount: newExtraSpins,
+          lastFreeSpinTimestamp: newLastFree,
+        );
+        dropMysteryCargo();
+        break;
+    }
+
+    _soundService.playPrestigeSound();
+    _autoSaveDebounced();
+  }
+
 
 
   /// Evaluates and advances missions based on actions

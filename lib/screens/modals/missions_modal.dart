@@ -62,19 +62,24 @@ class MissionsModal extends ConsumerWidget {
                 Expanded(
                   child: Row(
                     children: [
-                      const Text(
-                        'SECTOR DIRECTIVES',
-                        style: TextStyle(
-                          color: GameTheme.textPrimary,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0.8,
+                      const Flexible(
+                        child: Text(
+                          'SECTOR DIRECTIVES',
+                          style: TextStyle(
+                            color: GameTheme.textPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.6,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       if (unclaimedCount > 0) ...[
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 6),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             color: GameTheme.neonGreen,
                             borderRadius: BorderRadius.circular(10),
@@ -92,6 +97,7 @@ class MissionsModal extends ConsumerWidget {
                     ],
                   ),
                 ),
+
                 IconButton(
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),

@@ -293,17 +293,21 @@ class GalacticGame extends FlameGame with TapCallbacks {
 
     // 5. Fire Fleet Laser Bolt at Alien Boss if active
     if (_bossComponent != null && _activeBoss != null && !_activeBoss!.isDead) {
+      final double feverMultiplier = _isFeverActive ? 2.5 : 1.0;
+      final double laserDamage =
+          ship.calculateLaserDamage(multiplier: feverMultiplier);
       final laser = LaserBoltComponent(
         startPos: position.clone(),
         targetPos: _bossComponent!.position.clone(),
-        damage: 15.0 + (ship.tier * 6.0),
-        laserColor: ship.glowColor,
+        damage: laserDamage,
+        laserColor: _isFeverActive ? const Color(0xFFFF0055) : ship.glowColor,
         onHit: (dmg) {
           _bossComponent?.receiveDamage(dmg, isTap: false);
         },
       );
       add(laser);
     }
+
 
     // 6. Notify Riverpod State
     onIncomeEarned(ship);

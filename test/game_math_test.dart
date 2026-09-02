@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:galacticgame/models/game_state.dart';
 import 'package:galacticgame/models/ship_model.dart';
+import 'package:galacticgame/models/roulette_reward_model.dart';
 import 'package:galacticgame/providers/game_economy_provider.dart';
+
 
 
 import 'package:galacticgame/services/storage_service.dart';
@@ -56,18 +58,34 @@ void main() {
     });
 
     test('Income payout formula scales with 2.1 factor', () {
-      final shipTier1 = ShipModel.create(1);
-      final shipTier2 = ShipModel.create(2);
-      final shipTier3 = ShipModel.create(3);
+      final ship1 = ShipModel.create(1);
+      final ship2 = ShipModel.create(2);
+      final ship3 = ShipModel.create(3);
 
-      final income1 = shipTier1.calculateIncomePayout();
-      final income2 = shipTier2.calculateIncomePayout();
-      final income3 = shipTier3.calculateIncomePayout();
-
-      expect(income1, 10.0);
-      expect(income2, closeTo(21.0, 0.01));
-      expect(income3, closeTo(44.1, 0.01));
+      expect(ship1.calculateIncomePayout(), 10.0);
+      expect(ship2.calculateIncomePayout(), 21.0);
+      expect(ship3.calculateIncomePayout(), closeTo(44.1, 0.01));
     });
+
+    test('Ship laser strike damage scales exponentially with ship tier', () {
+      final ship1 = ShipModel.create(1);
+      final ship2 = ShipModel.create(2);
+      final ship3 = ShipModel.create(3);
+      final ship5 = ShipModel.create(5);
+
+      // T1 = 15 base
+      expect(ship1.calculateLaserDamage(), 15.0);
+      // T2 = 15 * 1.6 = 24
+      expect(ship2.calculateLaserDamage(), 24.0);
+      // T3 = 15 * 1.6^2 = 38.4
+      expect(ship3.calculateLaserDamage(), closeTo(38.4, 0.01));
+      // T5 = 15 * 1.6^4 = 98.304
+      expect(ship5.calculateLaserDamage(), closeTo(98.30, 0.01));
+
+      // With 2.5x Fever boost
+      expect(ship1.calculateLaserDamage(multiplier: 2.5), 37.5);
+    });
+
 
     test('Prestige Dark Matter yield formula', () {
       final stateLow = GameState.initial().copyWith(lifetimeCredits: 100000);
@@ -165,7 +183,54 @@ void main() {
       expect(notifier.state.relics.firstWhere((r) => r.id == 'relic_chronos_core').level, 2);
       expect(notifier.relicSpeedMultiplier, 1.30); // +30%
     });
+
+    test('Wormhole Roulette claims rewards, consumes spins, and awards bonuses', () {
+      final notifier = GameEconomyNotifier(GameState.initial());
+      expect(notifier.state.canSpinFree, true);
+      expect(notifier.state.extraSpinsCount, 1);
+
+      final segments = RouletteRewardModel.getSegments();
+      final dmReward = segments.firstWhere((s) => s.type == RouletteRewardType.darkMatter);
+
+      final double prevDm = notifier.state.darkMatter;
+      notifier.claimRouletteReward(dmReward);
+
+      // Dark Matter awarded and extra spin consumed
+      expect(notifier.state.darkMatter > prevDm, true);
+      expect(notifier.state.extraSpinsCount, 0);
+
+      // Award extra spin
+      notifier.addExtraSpin(count: 2);
+      expect(notifier.state.extraSpinsCount, 2);
+      expect(notifier.state.canSpinFree, true);
+    });
+
+    test('Defensive Validations: Cannot scrap last remaining active ship and cannot merge crates', () {
+
+      final notifier = GameEconomyNotifier(GameState.initial());
+      // Initially 1 active ship on slot 0
+      final int activeCount = notifier.state.gridSlots.where((s) => s != null && !s.isBox).length;
+      expect(activeCount, 1);
+
+      // Attempt to scrap the only ship -> must be rejected with -1.0
+      final scrapResult = notifier.recycleShip(0);
+      expect(scrapResult, -1.0);
+      expect(notifier.state.gridSlots[0] != null, true);
+
+      // Add second ship
+      notifier.state = notifier.state.copyWith(
+        credits: 10000,
+      );
+      notifier.purchaseShip();
+      expect(notifier.state.gridSlots.where((s) => s != null && !s.isBox).length, 2);
+
+      // Now scrapping one ship is allowed
+      final scrapAllowed = notifier.recycleShip(1);
+      expect(scrapAllowed > 0, true);
+    });
   });
 }
+
+
 
 

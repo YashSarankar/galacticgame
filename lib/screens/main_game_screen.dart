@@ -21,8 +21,10 @@ import 'modals/prestige_modal.dart';
 import 'modals/skill_tree_modal.dart';
 import 'modals/discovery_modal.dart';
 import 'modals/relics_modal.dart';
+import 'modals/wormhole_roulette_modal.dart';
 
 class MainGameScreen extends ConsumerStatefulWidget {
+
 
   const MainGameScreen({super.key});
 
@@ -46,31 +48,46 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
     super.initState();
     _galacticGame = GalacticGame(
       onIncomeEarned: (ship) {
-        final adState = ref.read(adStateProvider);
-        final double multiplier = adState.isSpeedBoostActive ? 2.0 : 1.0;
-        ref
-            .read(gameStateProvider.notifier)
-            .recordIncomeLineCrossing(ship, adMultiplier: multiplier);
+        Future.microtask(() {
+          if (!mounted) return;
+          final adState = ref.read(adStateProvider);
+          final double multiplier = adState.isSpeedBoostActive ? 2.0 : 1.0;
+          ref
+              .read(gameStateProvider.notifier)
+              .recordIncomeLineCrossing(ship, adMultiplier: multiplier);
+        });
       },
       onAsteroidDestroyed: (isDM, reward) {
-        ref
-            .read(gameStateProvider.notifier)
-            .recordAsteroidShattered(isDarkMatter: isDM, rewardCredits: reward);
+        Future.microtask(() {
+          if (!mounted) return;
+          ref.read(gameStateProvider.notifier).recordAsteroidShattered(
+                isDarkMatter: isDM,
+                rewardCredits: reward,
+              );
+        });
       },
       onCanvasTapped: () {
-        ref.read(gameStateProvider.notifier).tapRacetrackBoost();
+        Future.microtask(() {
+          if (!mounted) return;
+          ref.read(gameStateProvider.notifier).tapRacetrackBoost();
+        });
       },
       onBossDamaged: (damage, {bool isTap = false}) {
-        ref.read(gameStateProvider.notifier).damageBoss(damage, isTap: isTap);
+        Future.microtask(() {
+          if (!mounted) return;
+          ref.read(gameStateProvider.notifier).damageBoss(damage, isTap: isTap);
+        });
       },
     );
 
-    // Periodic Mystery Cosmic Cargo Crate Drops (Every 38 seconds)
-    _cargoDropTimer = Timer.periodic(const Duration(seconds: 38), (_) {
+
+    // Periodic Mystery Cosmic Cargo Crate Drops (Every 90 seconds)
+    _cargoDropTimer = Timer.periodic(const Duration(seconds: 90), (_) {
       if (mounted && !_isModalOpen) {
         ref.read(gameStateProvider.notifier).dropMysteryCargo();
       }
     });
+
 
     // Real-time Fever & Boss ticker (100ms interval for fluid decay & countdown)
     _feverTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
@@ -155,8 +172,61 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
   Widget build(BuildContext context) {
     _checkOfflineEarningsOnStartup(ref);
 
+    // Listen for boss defeat to celebrate victory with celebratory toast banner
+    ref.listen(gameStateProvider, (prev, next) {
+      if (prev != null && prev.activeBoss != null && next.activeBoss == null) {
+        if (prev.activeBoss!.currentHealth <= 0 || prev.activeBoss!.isDead) {
+          final boss = prev.activeBoss!;
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: const Color(0xFF131B3A),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: const BorderSide(color: Color(0xFFFF0055), width: 1.5),
+              ),
+              content: Row(
+                children: [
+                  const Icon(Icons.stars_rounded,
+                      color: Color(0xFFFFD700), size: 22),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '👾 ${boss.name.toUpperCase()} DESTROYED!',
+                          style: const TextStyle(
+                            color: Color(0xFFFF0055),
+                            fontWeight: FontWeight.w900,
+                            fontSize: 12,
+                          ),
+                        ),
+                        Text(
+                          '+${NumberFormatter.formatCredits(boss.bountyCredits)} • +${NumberFormatter.formatDarkMatter(boss.bountyDarkMatter)} DM • +1 Spin!',
+                          style: const TextStyle(
+                            color: Color(0xFF00FF88),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    });
+
     final gameState = ref.watch(gameStateProvider);
     final adState = ref.watch(adStateProvider);
+
 
     // Check if player unlocked a brand new highest tier to trigger Discovery Celebration Modal
     if (gameState.highestTierUnlocked > _lastSeenHighestTier) {
@@ -353,159 +423,229 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: GameTheme.glassCard(radius: 14),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // Soft Credits Counter
+          // Row 1: Currency Stats
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: GameTheme.neonGold.withAlpha((0.2 * 255).round()),
-                ),
-                child: const Icon(
-                  Icons.monetization_on_rounded,
-                  color: GameTheme.neonGold,
-                  size: 16,
-                ),
+              // Soft Credits Counter
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: GameTheme.neonGold.withAlpha((0.2 * 255).round()),
+                    ),
+                    child: const Icon(
+                      Icons.monetization_on_rounded,
+                      color: GameTheme.neonGold,
+                      size: 16,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    NumberFormatter.formatCredits(state.credits),
+                    style: const TextStyle(
+                      color: GameTheme.neonGold,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      shadows: [
+                        Shadow(color: GameTheme.neonGold, blurRadius: 8),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 6),
-              Text(
-                NumberFormatter.formatCredits(state.credits),
-                style: const TextStyle(
-                  color: GameTheme.neonGold,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w900,
-                  shadows: [
-                    Shadow(color: GameTheme.neonGold, blurRadius: 8),
-                  ],
-                ),
+
+              // Hard Currency (Dark Matter)
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: GameTheme.neonPurple.withAlpha((0.2 * 255).round()),
+                    ),
+                    child: const Icon(
+                      Icons.auto_awesome_rounded,
+                      color: GameTheme.neonPurple,
+                      size: 16,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    NumberFormatter.formatDarkMatter(state.darkMatter),
+                    style: const TextStyle(
+                      color: GameTheme.neonPurple,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                      shadows: [
+                        Shadow(color: GameTheme.neonPurple, blurRadius: 8),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
 
-          // Hard Currency (Dark Matter)
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: GameTheme.neonPurple.withAlpha((0.2 * 255).round()),
-                ),
-                child: const Icon(
-                  Icons.auto_awesome_rounded,
-                  color: GameTheme.neonPurple,
-                  size: 16,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                NumberFormatter.formatDarkMatter(state.darkMatter),
-                style: const TextStyle(
-                  color: GameTheme.neonPurple,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
-                  shadows: [
-                    Shadow(color: GameTheme.neonPurple, blurRadius: 8),
-                  ],
-                ),
-              ),
-            ],
-          ),
+          const SizedBox(height: 8),
 
+          // Row 2: Action CTAs (Beacon, Spin, Prestige)
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Boss Summon Beacon (if no boss active)
-              if (state.activeBoss == null || state.activeBoss!.isDead) ...[
-                InkWell(
+              // 1. Boss Summon Beacon (if no boss active)
+              if (state.activeBoss == null || state.activeBoss!.isDead)
+                Expanded(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () {
+                      ref.read(gameStateProvider.notifier).spawnAlienBoss();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFF0055)
+                            .withAlpha((0.25 * 255).round()),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                            color: const Color(0xFFFF0055), width: 1.2),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.radar_rounded,
+                            color: Color(0xFFFF0055),
+                            size: 13,
+                          ),
+                          SizedBox(width: 3),
+                          Text(
+                            'BEACON',
+                            style: TextStyle(
+                              color: Color(0xFFFF0055),
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+              if (state.activeBoss == null || state.activeBoss!.isDead)
+                const SizedBox(width: 6),
+
+              // 2. Wormhole Roulette Button
+              Expanded(
+                child: InkWell(
                   borderRadius: BorderRadius.circular(10),
                   onTap: () {
-                    ref.read(gameStateProvider.notifier).spawnAlienBoss();
+                    _openGameModal((ctx) => const WormholeRouletteModal());
                   },
                   child: Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFF0055)
-                          .withAlpha((0.25 * 255).round()),
+                      color: const Color(0xFF00F5FF)
+                          .withAlpha((0.20 * 255).round()),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                          color: const Color(0xFFFF0055), width: 1.2),
+                          color: const Color(0xFF00F5FF), width: 1.2),
                     ),
-                    child: const Row(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          Icons.radar_rounded,
-                          color: Color(0xFFFF0055),
-                          size: 14,
+                        const Icon(
+                          Icons.blur_circular_rounded,
+                          color: Color(0xFF00F5FF),
+                          size: 13,
                         ),
-                        SizedBox(width: 3),
-                        Text(
-                          'BEACON',
+                        const SizedBox(width: 3),
+                        const Text(
+                          'SPIN',
                           style: TextStyle(
-                            color: Color(0xFFFF0055),
-                            fontSize: 10,
+                            color: Color(0xFF00F5FF),
+                            fontSize: 9.5,
                             fontWeight: FontWeight.w900,
-                            letterSpacing: 0.5,
+                            letterSpacing: 0.3,
                           ),
                         ),
+                        if (state.canSpinFree) ...[
+                          const SizedBox(width: 4),
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF00FF88),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(width: 6),
-              ],
+              ),
 
-              // Galactic Prestige Button
-              InkWell(
-                borderRadius: BorderRadius.circular(10),
-                onTap: () {
-                  _openGameModal((ctx) => PrestigeModal(
-                        state: state,
-                        onPrestige: () {
-                          ref
-                              .read(gameStateProvider.notifier)
-                              .performGalacticPrestige();
-                        },
-                        onPrestigeDoubled: () {
-                          ref
-                              .read(gameStateProvider.notifier)
-                              .performGalacticPrestige(doubleYield: true);
-                        },
-                      ));
-                },
+              const SizedBox(width: 6),
 
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color:
-                        GameTheme.neonMagenta.withAlpha((0.25 * 255).round()),
-                    borderRadius: BorderRadius.circular(10),
-                    border:
-                        Border.all(color: GameTheme.neonMagenta, width: 1.2),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(
-                        Icons.restart_alt_rounded,
-                        color: GameTheme.neonMagenta,
-                        size: 16,
-                      ),
-                      SizedBox(width: 4),
-                      Text(
-                        'PRESTIGE',
-                        style: TextStyle(
+              // 3. Galactic Prestige Button
+              Expanded(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () {
+                    _openGameModal((ctx) => PrestigeModal(
+                          state: state,
+                          onPrestige: () {
+                            ref
+                                .read(gameStateProvider.notifier)
+                                .performGalacticPrestige();
+                          },
+                          onPrestigeDoubled: () {
+                            ref
+                                .read(gameStateProvider.notifier)
+                                .performGalacticPrestige(doubleYield: true);
+                          },
+                        ));
+                  },
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: GameTheme.neonMagenta
+                          .withAlpha((0.25 * 255).round()),
+                      borderRadius: BorderRadius.circular(10),
+                      border:
+                          Border.all(color: GameTheme.neonMagenta, width: 1.2),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.restart_alt_rounded,
                           color: GameTheme.neonMagenta,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0.6,
+                          size: 13,
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 3),
+                        Text(
+                          'PRESTIGE (${state.career.sectorLevel})',
+                          style: const TextStyle(
+                            color: GameTheme.neonMagenta,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -565,22 +705,26 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
                     color: GameTheme.neonPurple.withAlpha((0.5 * 255).round()),
                   ),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.stars_rounded,
                       color: GameTheme.neonPurple,
                       size: 16,
                     ),
-                    SizedBox(width: 8),
-                    Text(
-                      'ALL DIRECTIVES COMPLETED • PRESTIGE FOR NEW SECTORS',
-                      style: TextStyle(
-                        color: GameTheme.neonPurple,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.5,
+                    const SizedBox(width: 8),
+                    const Flexible(
+                      child: Text(
+                        'ALL DIRECTIVES COMPLETED • PRESTIGE FOR NEW SECTORS',
+                        style: TextStyle(
+                          color: GameTheme.neonPurple,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.5,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -616,16 +760,20 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
-                                activeMission.title,
-                                style: const TextStyle(
-                                  color: GameTheme.textPrimary,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
+                              Expanded(
+                                child: Text(
+                                  activeMission.title,
+                                  style: const TextStyle(
+                                    color: GameTheme.textPrimary,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
+                              const SizedBox(width: 6),
                               Text(
                                 '${activeMission.currentProgress.toInt()}/${activeMission.targetValue.toInt()}',
                                 style: TextStyle(
@@ -638,6 +786,7 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
                               ),
                             ],
                           ),
+
                           const SizedBox(height: 3),
                           LinearProgressIndicator(
                             value: activeMission.progressRatio,
@@ -1196,202 +1345,229 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
   }) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      padding: const EdgeInsets.all(8),
       decoration: GameTheme.glassCard(
         borderColor: GameTheme.cardBorder,
         radius: 16,
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // 0. DragTarget Scrap / Recycle Bin
-          DragTarget<int>(
-            onWillAcceptWithDetails: (details) => true,
-            onAcceptWithDetails: (details) {
-              final refund = ref
-                  .read(gameStateProvider.notifier)
-                  .recycleShip(details.data);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  backgroundColor: const Color(0xFF1E293B),
-                  content: Text(
-                    '♻️ Recycled for +${NumberFormatter.formatCredits(refund)} credits!',
-                    style: const TextStyle(
-                      color: Color(0xFF00F5FF),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  duration: const Duration(seconds: 1),
-                ),
-              );
-            },
-            builder: (context, candidateData, rejectedData) {
-              final isHovered = candidateData.isNotEmpty;
-              return Container(
-                width: 44,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: isHovered
-                      ? const Color(0xFFFF0055).withAlpha((0.35 * 255).round())
-                      : GameTheme.cardSurface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: isHovered
-                        ? const Color(0xFFFF0055)
-                        : Colors.white24,
-                    width: isHovered ? 2.0 : 1.0,
-                  ),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.delete_sweep_rounded,
-                      color:
-                          isHovered ? const Color(0xFFFF0055) : Colors.white60,
-                      size: 18,
-                    ),
-                    const SizedBox(height: 1),
-                    Text(
-                      'SCRAP',
-                      style: TextStyle(
+          // Tier 1: Utility & Subsystem Tools
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: Row(
+              children: [
+                // 0. DragTarget Scrap / Recycle Bin
+                DragTarget<int>(
+                  onWillAcceptWithDetails: (details) => true,
+                  onAcceptWithDetails: (details) {
+                    final refund = ref
+                        .read(gameStateProvider.notifier)
+                        .recycleShip(details.data);
+                    if (refund == -1.0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          backgroundColor: Color(0xFFFF0055),
+                          content: Text(
+                            '⚠️ Cannot scrap your last remaining ship! Keep at least 1 ship in your fleet.',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    } else if (refund > 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          backgroundColor: const Color(0xFF1E293B),
+                          content: Text(
+                            '♻️ Recycled for +${NumberFormatter.formatCredits(refund)} credits!',
+                            style: const TextStyle(
+                              color: Color(0xFF00F5FF),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          duration: const Duration(seconds: 1),
+                        ),
+                      );
+                    }
+                  },
+
+                  builder: (context, candidateData, rejectedData) {
+                    final isHovered = candidateData.isNotEmpty;
+                    return Container(
+                      width: 46,
+                      height: 44,
+                      decoration: BoxDecoration(
                         color: isHovered
                             ? const Color(0xFFFF0055)
-                            : Colors.white54,
-                        fontSize: 7.5,
-                        fontWeight: FontWeight.w900,
+                                .withAlpha((0.35 * 255).round())
+                            : GameTheme.cardSurface,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isHovered
+                              ? const Color(0xFFFF0055)
+                              : Colors.white24,
+                          width: isHovered ? 2.0 : 1.0,
+                        ),
                       ),
-                    ),
-                  ],
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.delete_sweep_rounded,
+                            color: isHovered
+                                ? const Color(0xFFFF0055)
+                                : Colors.white60,
+                            size: 17,
+                          ),
+                          const SizedBox(height: 1),
+                          Text(
+                            'SCRAP',
+                            style: TextStyle(
+                              color: isHovered
+                                  ? const Color(0xFFFF0055)
+                                  : Colors.white54,
+                              fontSize: 7.5,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
-              );
-            },
-          ),
-          const SizedBox(width: 6),
+                const SizedBox(width: 6),
 
-          // 1. Auto-Merge Button
-          _buildActionButton(
-            icon: Icons.auto_awesome_rounded,
-            label: 'AUTO',
-            color: const Color(0xFFFFD700),
-            onTap: () {
-              final count =
-                  ref.read(gameStateProvider.notifier).autoMergeGrid();
-              if (count == 0) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    backgroundColor: Color(0xFF1E293B),
-                    content: Text(
-                      'No matching pairs ready to merge!',
-                      style: TextStyle(color: Colors.white70),
+                // 1. Auto-Merge Button
+                _buildActionButton(
+                  icon: Icons.auto_awesome_rounded,
+                  label: 'AUTO',
+                  color: const Color(0xFFFFD700),
+                  onTap: () {
+                    final count =
+                        ref.read(gameStateProvider.notifier).autoMergeGrid();
+                    if (count == 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          backgroundColor: Color(0xFF1E293B),
+                          content: Text(
+                            'No matching pairs ready to merge!',
+                            style: TextStyle(color: Colors.white70),
+                          ),
+                          duration: Duration(milliseconds: 900),
+                        ),
+                      );
+                    }
+                  },
+                ),
+                const SizedBox(width: 6),
+
+                // 2. Tech Tree Button
+                _buildActionButton(
+                  icon: Icons.account_tree_rounded,
+                  label: 'TECH',
+                  color: GameTheme.neonPurple,
+                  onTap: () {
+                    _openGameModal((ctx) => const SkillTreeModal());
+                  },
+                ),
+                const SizedBox(width: 6),
+
+                // 3. Missions Button
+                _buildActionButton(
+                  icon: Icons.flag_rounded,
+                  label: 'DIRECTIVES',
+                  color: GameTheme.neonGreen,
+                  badgeCount: unclaimedMissions,
+                  onTap: () {
+                    _openGameModal((ctx) => const MissionsModal());
+                  },
+                ),
+                const SizedBox(width: 6),
+
+                // 4. Relics Vault Button
+                _buildActionButton(
+                  icon: Icons.auto_awesome_rounded,
+                  label: 'RELICS',
+                  color: const Color(0xFFBD00FF),
+                  onTap: () {
+                    _openGameModal((ctx) => const RelicsModal());
+                  },
+                ),
+                const SizedBox(width: 6),
+
+                // 5. 2X Track Speed Boost Button (Rewarded Ad)
+                _buildActionButton(
+                  icon: Icons.bolt_rounded,
+                  label: adState.isSpeedBoostActive
+                      ? NumberFormatter.formatSeconds(
+                          adState.speedBoostRemainingSeconds)
+                      : '2X SPEED',
+                  color: GameTheme.neonAmber,
+                  isActive: adState.isSpeedBoostActive,
+                  onTap: () {
+                    if (adState.isSpeedBoostActive) return;
+                    AdManager().showRewardedAd(
+                      onUserEarnedReward: () {
+                        ref
+                            .read(adStateProvider.notifier)
+                            .activateSpeedBoost();
+                      },
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          // Tier 2: Full-Width Primary Buy Ship CTA
+          SizedBox(
+            width: double.infinity,
+            height: 46,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor:
+                    canAffordShip ? GameTheme.neonCyan : Colors.grey.shade800,
+                foregroundColor:
+                    canAffordShip ? Colors.black : Colors.white54,
+                elevation: canAffordShip ? 6 : 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: canAffordShip
+                  ? () {
+                      ref.read(gameStateProvider.notifier).purchaseShip();
+                    }
+                  : null,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.shopping_cart_rounded, size: 16),
+                  const SizedBox(width: 6),
+                  Text(
+                    'BUY SHIP (TIER $dropTier) • ',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12,
+                      letterSpacing: 0.5,
                     ),
-                    duration: Duration(milliseconds: 900),
                   ),
-                );
-              }
-            },
-          ),
-          const SizedBox(width: 6),
-
-          // 2. Tech Tree Button
-          _buildActionButton(
-            icon: Icons.account_tree_rounded,
-            label: 'TECH',
-            color: GameTheme.neonPurple,
-            onTap: () {
-              _openGameModal((ctx) => const SkillTreeModal());
-            },
-          ),
-          const SizedBox(width: 6),
-
-          // 3. Missions Button
-          _buildActionButton(
-            icon: Icons.flag_rounded,
-            label: 'DIRECTIVES',
-            color: GameTheme.neonGreen,
-            badgeCount: unclaimedMissions,
-            onTap: () {
-              _openGameModal((ctx) => const MissionsModal());
-            },
-          ),
-          const SizedBox(width: 6),
-
-          // 4. Relics Vault Button
-          _buildActionButton(
-            icon: Icons.auto_awesome_rounded,
-            label: 'RELICS',
-            color: const Color(0xFFBD00FF),
-            onTap: () {
-              _openGameModal((ctx) => const RelicsModal());
-            },
-          ),
-          const SizedBox(width: 8),
-
-
-          // 3. 2X Track Speed Boost Button (Rewarded Ad)
-          _buildActionButton(
-            icon: Icons.bolt_rounded,
-            label: adState.isSpeedBoostActive
-                ? NumberFormatter.formatSeconds(
-                    adState.speedBoostRemainingSeconds)
-                : '2X SPEED',
-            color: GameTheme.neonAmber,
-            isActive: adState.isSpeedBoostActive,
-            onTap: () {
-              if (adState.isSpeedBoostActive) return;
-              AdManager().showRewardedAd(
-                onUserEarnedReward: () {
-                  ref.read(adStateProvider.notifier).activateSpeedBoost();
-                },
-              );
-            },
-          ),
-          const SizedBox(width: 10),
-
-          // 4. Primary Buy Ship CTA
-          Expanded(
-            child: SizedBox(
-              height: 48,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor:
-                      canAffordShip ? GameTheme.neonCyan : Colors.grey.shade800,
-                  foregroundColor:
-                      canAffordShip ? Colors.black : Colors.white54,
-                  elevation: canAffordShip ? 6 : 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                  Text(
+                    NumberFormatter.formatCredits(nextBuyCost),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
+                    ),
                   ),
-                ),
-                onPressed: canAffordShip
-                    ? () {
-                        ref.read(gameStateProvider.notifier).purchaseShip();
-                      }
-                    : null,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'BUY SHIP (T$dropTier)',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 11,
-                        letterSpacing: 0.2,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      NumberFormatter.formatCredits(nextBuyCost),
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                      ),
-                      maxLines: 1,
-                    ),
-                  ],
-                ),
+                ],
               ),
             ),
           ),

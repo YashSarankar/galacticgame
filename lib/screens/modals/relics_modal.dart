@@ -41,33 +41,34 @@ class RelicsModal extends ConsumerWidget {
 
           // Header
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Row(
-                children: [
-                  Icon(
-                    Icons.auto_awesome_rounded,
-                    color: GameTheme.neonPurple,
-                    size: 22,
+              const Icon(
+                Icons.auto_awesome_rounded,
+                color: GameTheme.neonPurple,
+                size: 22,
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'ARTIFACT MATRIX',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.8,
                   ),
-                  SizedBox(width: 8),
-                  Text(
-                    'ARTIFACT MATRIX',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                ],
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               IconButton(
-                icon: const Icon(Icons.close, color: Colors.white60),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                icon: const Icon(Icons.close, color: Colors.white60, size: 20),
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ],
           ),
+
 
           // Active Multiplier Summary Bar
           Container(

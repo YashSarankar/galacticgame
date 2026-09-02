@@ -29,7 +29,11 @@ class BossModel {
   bool get isDead => currentHealth <= 0.0;
   double get healthPercentage => (currentHealth / maxHealth).clamp(0.0, 1.0);
 
-  factory BossModel.createForSector(int sectorLevel, double baseIncomePerLap) {
+  factory BossModel.createForSector({
+    required int sectorLevel,
+    int highestTierUnlocked = 1,
+    double baseIncomePerLap = 50.0,
+  }) {
     const bossSprites = [
       'assets/kenney_space-shooter-remastered/PNG/Enemies/enemyRed1.png',
       'assets/kenney_space-shooter-remastered/PNG/Enemies/enemyBlack3.png',
@@ -43,14 +47,18 @@ class BossModel {
       'Antimatter Leviathan',
     ];
 
-    final index = (sectorLevel - 1) % bossSprites.length;
-    final double hp = 300.0 + (sectorLevel * 150.0);
-    final double credits = max(5000.0, baseIncomePerLap * 45.0);
-    final double dm = 5.0 + (sectorLevel * 2.0);
+    final int effectiveLevel =
+        max(1, sectorLevel + ((highestTierUnlocked - 1) ~/ 2));
+    final index = (effectiveLevel - 1) % bossSprites.length;
+
+    // HP scales progressively with sector progression and spacecraft tier
+    final double hp = 300.0 * pow(1.35, max(0, effectiveLevel - 1)).toDouble();
+    final double credits = max(5000.0, baseIncomePerLap * 50.0);
+    final double dm = 5.0 + (effectiveLevel * 3.0);
 
     return BossModel(
       id: 'boss_${DateTime.now().millisecondsSinceEpoch}',
-      name: bossNames[index],
+      name: '${bossNames[index]} Mk.$effectiveLevel',
       spriteAsset: bossSprites[index],
       maxHealth: hp,
       currentHealth: hp,
@@ -59,6 +67,7 @@ class BossModel {
       bountyDarkMatter: dm,
     );
   }
+
 
   BossModel copyWith({
     String? id,
