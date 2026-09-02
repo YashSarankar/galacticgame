@@ -76,4 +76,11 @@ class NumberFormatter {
   static String formatSeconds(int totalSeconds) {
     return formatDuration(Duration(seconds: totalSeconds));
   }
+
+  /// Formats milliseconds to a compact duration string.
+  static String formatDurationMs(int millis) {
+    return formatDuration(Duration(milliseconds: millis));
+  }
 }
+
+

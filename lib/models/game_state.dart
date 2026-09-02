@@ -3,6 +3,7 @@ import 'ship_model.dart';
 import 'career_model.dart';
 import 'boss_model.dart';
 import 'relic_model.dart';
+import 'expedition_model.dart';
 
 /// Complete persistent state of the Galactic Merge Idle game.
 class GameState {
@@ -26,6 +27,12 @@ class GameState {
   final List<ShipModel?> gridSlots; // 16 items for 4x4 matrix
   final List<ShipModel> trackShips; // Active ships racing on Flame track
   final List<RelicModel> relics; // Discovered Ancient Alien Relics
+  final List<ExpeditionMission> expeditions; // Active & completed deep space sorties
+  final int currentLoginDay; // 1 to 7 for Commander Login Track
+  final int lastLoginClaimEpoch; // Timestamp of last claimed daily reward
+  final bool isDronePermanent; // VIP Drone lifetime AI license
+  final int droneRentalExpiryEpoch; // Expiry timestamp for rented VIP Drone
+  final List<String> unlockedPermanentBoosters; // e.g. ['perm_quantum_overdrive', 'perm_sublight_thrusters']
   final CareerModel career;
 
   const GameState({
@@ -49,6 +56,12 @@ class GameState {
     required this.gridSlots,
     required this.trackShips,
     required this.relics,
+    this.expeditions = const [],
+    this.currentLoginDay = 1,
+    this.lastLoginClaimEpoch = 0,
+    this.isDronePermanent = false,
+    this.droneRentalExpiryEpoch = 0,
+    this.unlockedPermanentBoosters = const [],
     required this.career,
   });
 
@@ -57,6 +70,31 @@ class GameState {
     return (now - lastFreeSpinTimestamp) >= (24 * 60 * 60 * 1000) ||
         extraSpinsCount > 0;
   }
+
+  /// Whether player is eligible to claim today's Commander Login Reward (20h cooldown)
+  bool get canClaimDailyReward {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    return (now - lastLoginClaimEpoch) >= (20 * 60 * 60 * 1000);
+  }
+
+  /// Whether the automated VIP support drone is actively running
+  bool get isDroneCurrentlyActive {
+    if (isDronePermanent) return true;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    return now < droneRentalExpiryEpoch;
+  }
+
+  /// Permanent Income Multiplier from Store purchases
+  double get permanentIncomeMultiplier =>
+      unlockedPermanentBoosters.contains('perm_quantum_overdrive') ? 1.50 : 1.0;
+
+  /// Permanent Ship Speed Multiplier from Store purchases
+  double get permanentSpeedMultiplier =>
+      unlockedPermanentBoosters.contains('perm_sublight_thrusters') ? 1.25 : 1.0;
+
+  /// Number of completed expeditions ready for bounty collection
+  int get readyExpeditionsCount =>
+      expeditions.where((e) => e.isReadyToClaim).length;
 
   /// Factory for fresh game state
   factory GameState.initial() {
@@ -81,14 +119,17 @@ class GameState {
       lastSaveTimestamp: DateTime.now().millisecondsSinceEpoch,
       lastFreeSpinTimestamp: 0,
       extraSpinsCount: 1,
+      currentLoginDay: 1,
+      lastLoginClaimEpoch: 0,
+      isDronePermanent: false,
+      droneRentalExpiryEpoch: 0,
+      unlockedPermanentBoosters: const [],
       gridSlots: slots,
       trackShips: [ShipModel.create(1)],
       relics: RelicModel.getInitialRelics(),
       career: CareerModel.initial(),
     );
   }
-
-
 
   /// Calculates potential Dark Matter on Galactic Reset: 150 * sqrt(Lifetime / 1e7)
   double get potentialPrestigeDarkMatter {
@@ -118,6 +159,12 @@ class GameState {
     List<ShipModel?>? gridSlots,
     List<ShipModel>? trackShips,
     List<RelicModel>? relics,
+    List<ExpeditionMission>? expeditions,
+    int? currentLoginDay,
+    int? lastLoginClaimEpoch,
+    bool? isDronePermanent,
+    int? droneRentalExpiryEpoch,
+    List<String>? unlockedPermanentBoosters,
     CareerModel? career,
   }) {
     return GameState(
@@ -142,6 +189,14 @@ class GameState {
       gridSlots: gridSlots ?? this.gridSlots,
       trackShips: trackShips ?? this.trackShips,
       relics: relics ?? this.relics,
+      expeditions: expeditions ?? this.expeditions,
+      currentLoginDay: currentLoginDay ?? this.currentLoginDay,
+      lastLoginClaimEpoch: lastLoginClaimEpoch ?? this.lastLoginClaimEpoch,
+      isDronePermanent: isDronePermanent ?? this.isDronePermanent,
+      droneRentalExpiryEpoch:
+          droneRentalExpiryEpoch ?? this.droneRentalExpiryEpoch,
+      unlockedPermanentBoosters:
+          unlockedPermanentBoosters ?? this.unlockedPermanentBoosters,
       career: career ?? this.career,
     );
   }
@@ -162,9 +217,16 @@ class GameState {
       'gridSlots': gridSlots.map((s) => s?.toJson()).toList(),
       'trackShips': trackShips.map((s) => s.toJson()).toList(),
       'relics': relics.map((r) => r.toJson()).toList(),
+      'expeditions': expeditions.map((e) => e.toJson()).toList(),
+      'currentLoginDay': currentLoginDay,
+      'lastLoginClaimEpoch': lastLoginClaimEpoch,
+      'isDronePermanent': isDronePermanent,
+      'droneRentalExpiryEpoch': droneRentalExpiryEpoch,
+      'unlockedPermanentBoosters': unlockedPermanentBoosters,
       'career': career.toJson(),
     };
   }
+
 
   factory GameState.fromJson(Map<String, dynamic> json) {
     return GameState(
@@ -203,11 +265,25 @@ class GameState {
               .map((r) => RelicModel.fromJson(r as Map<String, dynamic>))
               .toList()
           : RelicModel.getInitialRelics(),
+      expeditions: json['expeditions'] != null
+          ? (json['expeditions'] as List)
+              .map((e) => ExpeditionMission.fromJson(e as Map<String, dynamic>))
+              .toList()
+          : const [],
+      currentLoginDay: json['currentLoginDay'] as int? ?? 1,
+      lastLoginClaimEpoch: json['lastLoginClaimEpoch'] as int? ?? 0,
+      isDronePermanent: json['isDronePermanent'] as bool? ?? false,
+      droneRentalExpiryEpoch: json['droneRentalExpiryEpoch'] as int? ?? 0,
+      unlockedPermanentBoosters: json['unlockedPermanentBoosters'] != null
+          ? List<String>.from(json['unlockedPermanentBoosters'] as List)
+          : const [],
       career: json['career'] != null
           ? CareerModel.fromJson(json['career'] as Map<String, dynamic>)
           : CareerModel.initial(),
     );
   }
+
+
 
 }
 

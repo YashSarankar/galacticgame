@@ -2,7 +2,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:galacticgame/models/game_state.dart';
 import 'package:galacticgame/models/ship_model.dart';
 import 'package:galacticgame/models/roulette_reward_model.dart';
+import 'package:galacticgame/models/store_item_model.dart';
 import 'package:galacticgame/providers/game_economy_provider.dart';
+
+
+
 
 
 
@@ -228,8 +232,123 @@ void main() {
       final scrapAllowed = notifier.recycleShip(1);
       expect(scrapAllowed > 0, true);
     });
+
+    test('Constellation Expeditions: Launch, tier validation, speedup, and claim bounty', () {
+      final notifier = GameEconomyNotifier(GameState.initial());
+      expect(notifier.state.expeditions.isEmpty, true);
+      expect(notifier.state.readyExpeditionsCount, 0);
+
+      // Attempt to launch Orion (requires Tier 3) with Tier 1 -> must fail
+      final failedLaunch = notifier.launchExpedition('sector_orion', 1);
+      expect(failedLaunch, false);
+      expect(notifier.state.expeditions.isEmpty, true);
+
+      // Launch Andromeda (requires Tier 1) with Tier 1 -> must succeed
+      final successLaunch = notifier.launchExpedition('sector_andromeda', 1);
+      expect(successLaunch, true);
+      expect(notifier.state.expeditions.length, 1);
+
+      final mission = notifier.state.expeditions.first;
+      expect(mission.sectorId, 'sector_andromeda');
+      expect(mission.isClaimed, false);
+      expect(mission.isInProgress, true);
+
+      // Cannot launch the same sector concurrently
+      final duplicateLaunch = notifier.launchExpedition('sector_andromeda', 2);
+      expect(duplicateLaunch, false);
+
+      // Speed up expedition by 300 seconds (completes 5-min sortie)
+      notifier.speedUpExpeditionWithAd(mission.id, secondsReduced: 400);
+      final updatedMission = notifier.state.expeditions.first;
+      expect(updatedMission.isReadyToClaim, true);
+      expect(notifier.state.readyExpeditionsCount, 1);
+
+      // Claim Bounty
+      final double prevCredits = notifier.state.credits;
+      final claimed = notifier.claimExpeditionReward(updatedMission.id);
+      expect(claimed, true);
+      expect(notifier.state.credits > prevCredits, true);
+      expect(notifier.state.expeditions.isEmpty, true);
+      expect(notifier.state.readyExpeditionsCount, 0);
+    });
+
+    test('Daily Commander Login Calendar: Claim rewards, streak progression, and cooldown', () {
+      final notifier = GameEconomyNotifier(GameState.initial());
+      expect(notifier.state.canClaimDailyReward, true);
+      expect(notifier.state.currentLoginDay, 1);
+
+      // Claim Day 1
+      final prevCoins = notifier.state.credits;
+      final claimed = notifier.claimDailyLoginReward();
+      expect(claimed, true);
+      expect(notifier.state.credits, prevCoins + 1500.0);
+      expect(notifier.state.currentLoginDay, 2);
+
+      expect(notifier.state.canClaimDailyReward, false); // On cooldown
+
+      // Cannot claim again immediately
+      final secondClaim = notifier.claimDailyLoginReward();
+      expect(secondClaim, false);
+
+      // Simulate 24 hours later
+      final pastClaimTime = DateTime.now().millisecondsSinceEpoch - (24 * 3600 * 1000);
+      notifier.state = notifier.state.copyWith(lastLoginClaimEpoch: pastClaimTime);
+      expect(notifier.state.canClaimDailyReward, true);
+
+      // Claim Day 2 with Double Reward (Ad)
+      final prevShards = notifier.state.relics.first.shards;
+      final doubleClaim = notifier.claimDailyLoginReward(doubleWithAd: true);
+      expect(doubleClaim, true);
+      expect(notifier.state.currentLoginDay, 3);
+      // Awarded 5 * 2 = 10 relic shards
+      final totalShardsNow = notifier.state.relics.fold<int>(0, (s, r) => s + r.shards);
+      expect(totalShardsNow > prevShards, true);
+    });
+
+    test('Cosmic Store: Time Warp, Dark Matter conversion, and VIP Drone Auto-Collector', () {
+      final notifier = GameEconomyNotifier(GameState.initial().copyWith(
+        credits: 1000000.0,
+        darkMatter: 250.0,
+      ));
+
+
+      // 1. Dark Matter Transmutation (250K credits -> 10 DM)
+      final dmItem = StoreItem.catalog.firstWhere((i) => i.id == 'dm_cache_soft');
+      final buyDm = notifier.purchaseStoreItem(dmItem);
+      expect(buyDm, true);
+      expect(notifier.state.credits, 750000.0);
+      expect(notifier.state.darkMatter, 260.0);
+
+
+      // 2. Permanent Quantum Overdrive (+50% income)
+      final overdriveItem = StoreItem.catalog.firstWhere((i) => i.id == 'perm_quantum_overdrive');
+      final buyOverdrive = notifier.purchaseStoreItem(overdriveItem);
+      expect(buyOverdrive, true);
+      expect(notifier.state.permanentIncomeMultiplier, 1.50);
+
+      // 3. VIP Drone Lifetime License
+      expect(notifier.state.isDroneCurrentlyActive, false);
+      final droneItem = StoreItem.catalog.firstWhere((i) => i.id == 'drone_permanent');
+      final buyDrone = notifier.purchaseStoreItem(droneItem);
+      expect(buyDrone, true);
+      expect(notifier.state.isDronePermanent, true);
+      expect(notifier.state.isDroneCurrentlyActive, true);
+
+      // 4. VIP Drone Auto-Collector automatically opens delivery crates!
+      notifier.dropMysteryCargo(tier: 4);
+      final hasCrate = notifier.state.gridSlots.any((s) => s != null && s.isBox);
+      expect(hasCrate, true);
+
+      // Run Drone auto-collector
+      final opened = notifier.checkAndRunDroneCollector();
+      expect(opened, true);
+      final crateRemaining = notifier.state.gridSlots.any((s) => s != null && s.isBox);
+      expect(crateRemaining, false); // Opened into a ship!
+    });
   });
 }
+
+
 
 
 

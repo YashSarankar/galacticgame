@@ -44,17 +44,39 @@ class DiscoveryModal extends StatelessWidget {
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: ship.glowColor, width: 1.2),
               ),
-              child: Text(
-                '✨ NEW SPACECRAFT DISCOVERED! ✨',
-                style: TextStyle(
-                  color: ship.glowColor,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.8,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.auto_awesome,
+                      color: ship.glowColor,
+                      size: 13,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'NEW SHIP UNLOCKED!',
+                      style: TextStyle(
+                        color: ship.glowColor,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+
+                    Icon(
+                      Icons.auto_awesome,
+                      color: ship.glowColor,
+                      size: 13,
+                    ),
+                  ],
                 ),
               ),
             ),
             const SizedBox(height: 20),
+
 
             // Glowing Center Ship Display
             Stack(
@@ -163,7 +185,7 @@ class DiscoveryModal extends StatelessWidget {
                   onDismiss();
                 },
                 child: const Text(
-                  'DEPLOY TO FLEET',
+                  'AWESOME!',
                   style: TextStyle(
                     color: Colors.black,
                     fontSize: 14,
@@ -172,6 +194,7 @@ class DiscoveryModal extends StatelessWidget {
                   ),
                 ),
               ),
+
             ),
           ],
         ),

@@ -6,8 +6,12 @@ import '../models/boss_model.dart';
 import '../models/relic_model.dart';
 import '../models/roulette_reward_model.dart';
 import '../models/mission_model.dart';
-
+import '../models/expedition_model.dart';
+import '../models/daily_login_model.dart';
+import '../models/store_item_model.dart';
 import '../models/skill_node_model.dart';
+
+
 import '../models/career_model.dart';
 import '../services/sound_service.dart';
 import '../services/storage_service.dart';
@@ -16,6 +20,7 @@ import '../services/storage_service.dart';
 
 class GameEconomyNotifier extends StateNotifier<GameState> {
   final SoundService _soundService = SoundService();
+  void Function(int newTierDiscovered)? onShipDiscovered;
 
   GameEconomyNotifier(super.initialState);
 
@@ -23,6 +28,7 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
   void loadFromState(GameState loadedState) {
     state = loadedState;
   }
+
 
   /// Adds crossing income whenever a ship crosses the laser income line on track
   void recordIncomeLineCrossing(ShipModel ship, {double adMultiplier = 1.0}) {
@@ -46,10 +52,12 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     final double feverMultiplier = state.isFeverActive ? 3.0 : 1.0;
     final double totalPayout = ship.calculateIncomePayout(
       multiplier: permanentMultiplier *
+          state.permanentIncomeMultiplier *
           adMultiplier *
           feverMultiplier *
           relicIncomeMultiplier,
     );
+
 
 
     final int newCrossings = state.totalLineCrossings + 1;
@@ -114,7 +122,19 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
       final double decayed = max(0.0, state.feverCharge - (dt * 0.025));
       state = state.copyWith(feverCharge: decayed);
     }
+
+    // Reset combo message and combo chain multiplier after 2.5 seconds of inactivity
+    if (state.lastComboMessage.isNotEmpty) {
+      final int now = DateTime.now().millisecondsSinceEpoch;
+      if (now - state.lastMergeTimestamp > 2500) {
+        state = state.copyWith(
+          lastComboMessage: '',
+          comboCount: 0,
+        );
+      }
+    }
   }
+
 
 
   /// Buys base ship from shipyard
@@ -214,7 +234,7 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
   }
 
   /// Spawns a mystery cosmic supply crate directly onto an empty grid slot (waiting to be tapped!)
-  bool dropMysteryCargo() {
+  bool dropMysteryCargo({int? tier}) {
     // Prevent crate clutter: Max 1 unopened crate on grid at a time
     final int existingCrates =
         state.gridSlots.where((s) => s != null && s.isBox).length;
@@ -229,16 +249,21 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     }
     if (emptyIndices.isEmpty) return false;
 
-
     final random = Random();
     final int targetSlot = emptyIndices[random.nextInt(emptyIndices.length)];
 
-    final int minTier = activeStoreBuyTier;
-    final int maxTier = max(minTier, state.highestTierUnlocked);
-    final int awardedTier = minTier + random.nextInt(maxTier - minTier + 1);
+    final int awardedTier;
+    if (tier != null && tier > 0) {
+      awardedTier = tier.clamp(1, 50);
+    } else {
+      final int minTier = activeStoreBuyTier;
+      final int maxTier = max(minTier, state.highestTierUnlocked);
+      awardedTier = minTier + random.nextInt(maxTier - minTier + 1);
+    }
 
     final newSlots = List<ShipModel?>.from(state.gridSlots);
-    newSlots[targetSlot] = ShipModel.create(awardedTier, null, true); // isBox: true!
+    newSlots[targetSlot] =
+        ShipModel.create(awardedTier, null, true); // isBox: true!
 
     state = state.copyWith(
       gridSlots: newSlots,
@@ -248,6 +273,7 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     _autoSaveDebounced();
     return true;
   }
+
 
   /// Taps on a delivery crate to unbox the surprise ship inside!
   bool openCrate(int index) {
@@ -359,6 +385,7 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
       newSlots[fromIndex] = null;
 
       final int newMergeCount = state.totalMergesCount + 1;
+      final bool isNewDiscovery = newTier > state.highestTierUnlocked;
       final int newHighest = max(state.highestTierUnlocked, newTier);
 
       final int now = DateTime.now().millisecondsSinceEpoch;
@@ -408,6 +435,10 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
         career: state.career.copyWith(missions: updatedMissions),
       );
 
+      if (isNewDiscovery && newTier > 1) {
+        onShipDiscovered?.call(newTier);
+      }
+
       if (luckyDuplicated) {
         _soundService.playPrestigeSound();
       } else if (newComboCount >= 2) {
@@ -417,6 +448,7 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
       }
       _autoSaveDebounced();
       return true;
+
     } else {
       // Swap positions
       newSlots[fromIndex] = targetShip;
@@ -501,6 +533,7 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     }
 
     if (totalMergesMade > 0) {
+      final int prevHighest = state.highestTierUnlocked;
       state = state.copyWith(
         gridSlots: newSlots,
         trackShips: computeTrackFleet(newSlots),
@@ -509,11 +542,17 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
         comboCount: totalMergesMade,
         lastComboMessage: '⚡ $totalMergesMade MERGES AUTO-COMPLETED!',
       );
+
+      if (newHighest > prevHighest && newHighest > 1) {
+        onShipDiscovered?.call(newHighest);
+      }
+
       _soundService.playMergeSound();
       _autoSaveDebounced();
     }
     return totalMergesMade;
   }
+
 
 
 
@@ -930,6 +969,260 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     _soundService.playPrestigeSound();
     _autoSaveDebounced();
   }
+
+  /// Dispatches a spacecraft on an interstellar constellation expedition
+  bool launchExpedition(String sectorId, int assignedShipTier) {
+    final sector = ExpeditionSector.catalog.firstWhere(
+      (s) => s.id == sectorId,
+      orElse: () => ExpeditionSector.catalog.first,
+    );
+
+    // Validate tier requirement
+    if (assignedShipTier < sector.minShipTier) return false;
+
+    // Check if sector already has an active expedition
+    final bool alreadyActive = state.expeditions.any(
+      (e) => e.sectorId == sectorId && !e.isClaimed,
+    );
+    if (alreadyActive) return false;
+
+    // Base income per lap reference from active fleet
+    final double baseFleetIncome = state.trackShips.isNotEmpty
+        ? state.trackShips.first.calculateIncomePayout()
+        : 50.0;
+
+    // Assigned ship tier bonus: higher tier ships multiply the bounty!
+    final double tierMultiplier =
+        pow(1.3, max(0, assignedShipTier - sector.minShipTier)).toDouble();
+
+    final double creditsReward = baseFleetIncome *
+        sector.baseCreditsMultiplier *
+        tierMultiplier *
+        relicIncomeMultiplier;
+    final double dmReward =
+        sector.darkMatterReward * (1.0 + (assignedShipTier * 0.1));
+    final int shardReward = sector.relicShardsReward > 0
+        ? (sector.relicShardsReward * (1.0 + (assignedShipTier * 0.05))).round()
+        : 0;
+
+    final newMission = ExpeditionMission(
+      id: 'exp_${DateTime.now().millisecondsSinceEpoch}',
+      sectorId: sector.id,
+      sectorName: sector.name,
+      durationSeconds: sector.durationSeconds,
+      startTimeEpoch: DateTime.now().millisecondsSinceEpoch,
+      assignedShipTier: assignedShipTier,
+      calculatedCredits: creditsReward,
+      calculatedDarkMatter: dmReward,
+      calculatedRelicShards: shardReward,
+      bonusBlueprintTier: sector.bonusBlueprintTier,
+    );
+
+    final updatedList = List<ExpeditionMission>.from(state.expeditions)
+      ..add(newMission);
+    state = state.copyWith(expeditions: updatedList);
+
+    _soundService.playPurchaseSound();
+    _autoSaveDebounced();
+    return true;
+  }
+
+  /// Claims reward from a completed expedition
+  bool claimExpeditionReward(String missionId) {
+    final int index = state.expeditions.indexWhere((e) => e.id == missionId);
+    if (index == -1) return false;
+
+    final mission = state.expeditions[index];
+    if (!mission.isReadyToClaim) return false;
+
+    // Award currencies
+    final double newCredits = state.credits + mission.calculatedCredits;
+    final double newLifetime =
+        state.lifetimeCredits + mission.calculatedCredits;
+    final double newDm = state.darkMatter + mission.calculatedDarkMatter;
+
+    // Award relic shards
+    if (mission.calculatedRelicShards > 0 && state.relics.isNotEmpty) {
+      final randomRelic = state.relics[Random().nextInt(state.relics.length)];
+      awardRelicShards(randomRelic.id, mission.calculatedRelicShards);
+    }
+
+    // Award bonus ship blueprint crate if applicable
+    if (mission.bonusBlueprintTier > 0) {
+      dropMysteryCargo(tier: mission.bonusBlueprintTier);
+    }
+
+    // Remove claimed mission from active list
+    final updatedList = List<ExpeditionMission>.from(state.expeditions)
+      ..removeAt(index);
+    state = state.copyWith(
+      credits: newCredits,
+      lifetimeCredits: newLifetime,
+      darkMatter: newDm,
+      expeditions: updatedList,
+    );
+
+    _soundService.playPrestigeSound();
+    _autoSaveDebounced();
+    return true;
+  }
+
+  /// Speeds up remaining expedition time by 30 minutes via Rewarded Ad
+  bool speedUpExpeditionWithAd(String missionId, {int secondsReduced = 1800}) {
+    final int index = state.expeditions.indexWhere((e) => e.id == missionId);
+    if (index == -1) return false;
+
+    final mission = state.expeditions[index];
+    final int newStart = mission.startTimeEpoch - (secondsReduced * 1000);
+    final updatedMission = mission.copyWith(startTimeEpoch: newStart);
+
+    final updatedList = List<ExpeditionMission>.from(state.expeditions);
+    updatedList[index] = updatedMission;
+
+    state = state.copyWith(expeditions: updatedList);
+    _autoSaveDebounced();
+    return true;
+  }
+
+  /// Claims today's reward from the 7-Day Commander Login Calendar
+  bool claimDailyLoginReward({bool doubleWithAd = false}) {
+    if (!state.canClaimDailyReward) return false;
+
+    final int dayIndex = (state.currentLoginDay - 1).clamp(0, 6);
+    final reward = DailyRewardDay.schedule[dayIndex];
+    final double multiplier = doubleWithAd ? 2.0 : 1.0;
+
+    final double addedCredits =
+        reward.creditsReward * multiplier * relicIncomeMultiplier;
+    final double addedDarkMatter = reward.darkMatterReward * multiplier;
+    final int addedShards = (reward.relicShardsReward * multiplier).round();
+    final int addedSpins = (reward.extraSpins * multiplier).round();
+
+    // Advance login streak (loops 1 to 7)
+    final int nextDay = (state.currentLoginDay % 7) + 1;
+
+    state = state.copyWith(
+      credits: state.credits + addedCredits,
+      lifetimeCredits: state.lifetimeCredits + addedCredits,
+      darkMatter: state.darkMatter + addedDarkMatter,
+      extraSpinsCount: state.extraSpinsCount + addedSpins,
+      currentLoginDay: nextDay,
+      lastLoginClaimEpoch: DateTime.now().millisecondsSinceEpoch,
+    );
+
+    // Award Relic Shards if any
+    if (addedShards > 0 && state.relics.isNotEmpty) {
+      final randomRelic = state.relics[Random().nextInt(state.relics.length)];
+      awardRelicShards(randomRelic.id, addedShards);
+    }
+
+    // Drop bonus delivery crate if applicable
+    if (reward.bonusTierCrate > 0) {
+      dropMysteryCargo(tier: reward.bonusTierCrate);
+    }
+
+    _soundService.playPrestigeSound();
+    _autoSaveDebounced();
+    return true;
+  }
+
+  /// Purchases an item from the In-Game Cosmic Store
+  bool purchaseStoreItem(StoreItem item) {
+    // Validate costs
+    if (item.costCredits > 0 && state.credits < item.costCredits) return false;
+    if (item.costDarkMatter > 0 && state.darkMatter < item.costDarkMatter) {
+      return false;
+    }
+
+    // Deduct currency
+    double newCredits = state.credits - item.costCredits;
+    double newDm = state.darkMatter - item.costDarkMatter;
+
+    switch (item.category) {
+      case StoreCategory.timeWarp:
+        // Calculate fleet revenue per hour
+        const double approxTrackLength = 1400.0;
+        final double totalFleetPerSec = state.trackShips.fold<double>(
+          0.0,
+          (sum, s) =>
+              sum +
+              (s.calculateIncomePayout() * (s.baseSpeed / approxTrackLength)),
+        );
+        final double effectivePerSec = max(10.0, totalFleetPerSec);
+        final double warpEarnings = effectivePerSec *
+            (item.warpDurationHours * 3600) *
+            relicIncomeMultiplier *
+            state.permanentIncomeMultiplier;
+
+        newCredits += warpEarnings;
+        state = state.copyWith(
+          credits: newCredits,
+          lifetimeCredits: state.lifetimeCredits + warpEarnings,
+          darkMatter: newDm,
+        );
+        break;
+
+      case StoreCategory.darkMatter:
+        newDm += item.grantedDarkMatter;
+        state = state.copyWith(
+          credits: newCredits,
+          darkMatter: newDm,
+        );
+        break;
+
+      case StoreCategory.vipDrone:
+        if (item.id == 'drone_permanent') {
+          state = state.copyWith(
+            credits: newCredits,
+            darkMatter: newDm,
+            isDronePermanent: true,
+          );
+        } else {
+          // Rental 30 min
+          final now = DateTime.now().millisecondsSinceEpoch;
+          final int currentBase = max(now, state.droneRentalExpiryEpoch);
+          final int newExpiry =
+              currentBase + (item.droneRentalDurationMinutes * 60 * 1000);
+          state = state.copyWith(
+            credits: newCredits,
+            darkMatter: newDm,
+            droneRentalExpiryEpoch: newExpiry,
+          );
+        }
+        break;
+
+      case StoreCategory.permanentBooster:
+        final updatedBoosters =
+            List<String>.from(state.unlockedPermanentBoosters);
+        if (!updatedBoosters.contains(item.id)) {
+          updatedBoosters.add(item.id);
+        }
+        state = state.copyWith(
+          credits: newCredits,
+          darkMatter: newDm,
+          unlockedPermanentBoosters: updatedBoosters,
+        );
+        break;
+    }
+
+    _soundService.playPurchaseSound();
+    _autoSaveDebounced();
+    return true;
+  }
+
+  /// Drone Auto-Collector: Automatically opens unopened crates if VIP drone is active
+  bool checkAndRunDroneCollector() {
+    if (!state.isDroneCurrentlyActive) return false;
+
+    final int crateIndex =
+        state.gridSlots.indexWhere((s) => s != null && s.isBox);
+    if (crateIndex != -1) {
+      return openCrate(crateIndex);
+    }
+    return false;
+  }
+
+
 
 
 

@@ -13,117 +13,129 @@ class RelicsModal extends ConsumerWidget {
     final gameState = ref.watch(gameStateProvider);
     final notifier = ref.read(gameStateProvider.notifier);
 
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
-      padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(
-        color: Color(0xFF070913),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        border: Border(
-          top: BorderSide(color: GameTheme.neonPurple, width: 2.0),
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.85,
+        padding: const EdgeInsets.all(16),
+        decoration: const BoxDecoration(
+          color: Color(0xFF070913),
+          borderRadius: BorderRadius.all(Radius.circular(24)),
+          border: Border.fromBorderSide(
+            BorderSide(color: GameTheme.neonPurple, width: 2.0),
+          ),
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Drag Handle
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Header
-          Row(
-            children: [
-              const Icon(
-                Icons.auto_awesome_rounded,
-                color: GameTheme.neonPurple,
-                size: 22,
-              ),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  'ARTIFACT MATRIX',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.8,
-                  ),
-                  overflow: TextOverflow.ellipsis,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Drag Handle
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              IconButton(
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                icon: const Icon(Icons.close, color: Colors.white60, size: 20),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ],
-          ),
-
-
-          // Active Multiplier Summary Bar
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: GameTheme.cardSurface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white12),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+            const SizedBox(height: 12),
+
+            // Header
+            Row(
               children: [
-                _buildStatBadge(
-                  label: 'SPEED',
-                  value:
-                      '+${((notifier.relicSpeedMultiplier - 1.0) * 100).toInt()}%',
-                  color: GameTheme.neonCyan,
-                ),
-                _buildStatBadge(
-                  label: 'INCOME',
-                  value:
-                      '+${((notifier.relicIncomeMultiplier - 1.0) * 100).toInt()}%',
-                  color: GameTheme.neonGreen,
-                ),
-                _buildStatBadge(
-                  label: 'DARK MATTER',
-                  value:
-                      '+${((notifier.relicDarkMatterMultiplier - 1.0) * 100).toInt()}%',
+                const Icon(
+                  Icons.auto_awesome_rounded,
                   color: GameTheme.neonPurple,
+                  size: 22,
                 ),
-                _buildStatBadge(
-                  label: 'TAP DMG',
-                  value:
-                      '+${((notifier.relicBossTapDamageBonus - 1.0) * 100).toInt()}%',
-                  color: const Color(0xFFFF0055),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'ANCIENT RELIC MATRIX',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white54, size: 20),
+                  onPressed: () => Navigator.of(context).pop(),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
                 ),
               ],
             ),
-          ),
 
-          const SizedBox(height: 6),
-
-          // Relic List
-          Expanded(
-            child: ListView.separated(
-              itemCount: gameState.relics.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 10),
-              itemBuilder: (context, index) {
-                final relic = gameState.relics[index];
-                return _buildRelicCard(context, relic, notifier);
-              },
+            const SizedBox(height: 6),
+            const Text(
+              'Collect and upgrade cosmic artifacts found in deep space expeditions & boss drops.',
+              style: TextStyle(color: Colors.white54, fontSize: 11),
             ),
-          ),
-        ],
+
+            const SizedBox(height: 12),
+
+            // Total Artifact Matrix Buffs Summary Card
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: GameTheme.neonPurple.withAlpha((0.15 * 255).round()),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: GameTheme.neonPurple.withAlpha((0.5 * 255).round()),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildStatBadge(
+                    label: 'SPEED',
+                    value:
+                        '+${((notifier.relicSpeedMultiplier - 1.0) * 100).toInt()}%',
+                    color: GameTheme.neonCyan,
+                  ),
+                  _buildStatBadge(
+                    label: 'INCOME',
+                    value:
+                        '+${((notifier.relicIncomeMultiplier - 1.0) * 100).toInt()}%',
+                    color: GameTheme.neonGreen,
+                  ),
+                  _buildStatBadge(
+                    label: 'DARK MATTER',
+                    value:
+                        '+${((notifier.relicDarkMatterMultiplier - 1.0) * 100).toInt()}%',
+                    color: GameTheme.neonPurple,
+                  ),
+                  _buildStatBadge(
+                    label: 'TAP DMG',
+                    value:
+                        '+${((notifier.relicBossTapDamageBonus - 1.0) * 100).toInt()}%',
+                    color: const Color(0xFFFF0055),
+                  ),
+                ],
+              ),
+            ),
+
+
+            const SizedBox(height: 6),
+
+            // Relic List
+            Expanded(
+              child: ListView.separated(
+                itemCount: gameState.relics.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  final relic = gameState.relics[index];
+                  return _buildRelicCard(context, relic, notifier);
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
