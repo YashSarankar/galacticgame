@@ -11,6 +11,7 @@ class ShipModel {
   final Color glowColor;
   final double baseIncome;
   final double baseSpeed; // pixels per second along path
+  final bool isBox; // Delivery Crate waiting to be tapped to unbox
 
   const ShipModel({
     required this.id,
@@ -20,10 +21,11 @@ class ShipModel {
     required this.glowColor,
     required this.baseIncome,
     required this.baseSpeed,
+    this.isBox = false,
   });
 
   /// Factory to generate a ship by tier with a unique instance ID.
-  factory ShipModel.create(int tier, [String? id]) {
+  factory ShipModel.create(int tier, [String? id, bool isBox = false]) {
     final spec = getTierSpec(tier);
     return ShipModel(
       id: id ?? '${spec.tier}_${DateTime.now().microsecondsSinceEpoch}_${Random().nextInt(9999)}',
@@ -33,6 +35,7 @@ class ShipModel {
       glowColor: spec.glowColor,
       baseIncome: spec.baseIncome,
       baseSpeed: spec.baseSpeed,
+      isBox: isBox,
     );
   }
 
@@ -51,6 +54,7 @@ class ShipModel {
     Color? glowColor,
     double? baseIncome,
     double? baseSpeed,
+    bool? isBox,
   }) {
     return ShipModel(
       id: id ?? this.id,
@@ -60,6 +64,7 @@ class ShipModel {
       glowColor: glowColor ?? this.glowColor,
       baseIncome: baseIncome ?? this.baseIncome,
       baseSpeed: baseSpeed ?? this.baseSpeed,
+      isBox: isBox ?? this.isBox,
     );
   }
 
@@ -72,9 +77,9 @@ class ShipModel {
       'glowColor': glowColor.toARGB32(),
       'baseIncome': baseIncome,
       'baseSpeed': baseSpeed,
+      'isBox': isBox,
     };
   }
-
 
   factory ShipModel.fromJson(Map<String, dynamic> json) {
     return ShipModel(
@@ -85,8 +90,10 @@ class ShipModel {
       glowColor: Color(json['glowColor'] as int),
       baseIncome: (json['baseIncome'] as num).toDouble(),
       baseSpeed: (json['baseSpeed'] as num).toDouble(),
+      isBox: json['isBox'] as bool? ?? false,
     );
   }
+
 
   /// Predefined tier catalog leveraging the Kenney Space Shooter Remastered pack.
   static ShipModel getTierSpec(int tier) {

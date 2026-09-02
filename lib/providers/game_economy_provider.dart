@@ -39,8 +39,9 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     );
 
     final double permanentMultiplier = 1.0 + incomeSkill.currentBonusValue;
+    final double feverMultiplier = state.isFeverActive ? 3.0 : 1.0;
     final double totalPayout = ship.calculateIncomePayout(
-      multiplier: permanentMultiplier * adMultiplier,
+      multiplier: permanentMultiplier * adMultiplier * feverMultiplier,
     );
 
     final int newCrossings = state.totalLineCrossings + 1;
@@ -64,6 +65,49 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     _soundService.playIncomeSound();
     _autoSaveDebounced();
   }
+
+  /// Tapping the racetrack charges the Hyperspace Warp Meter (+4% per tap)
+  void tapRacetrackBoost() {
+    if (state.isFeverActive) return; // Already maxed in fever mode
+
+    final double newCharge = min(1.0, state.feverCharge + 0.04);
+    if (newCharge >= 1.0) {
+      // Trigger Hyperspace Fever Rush!
+      state = state.copyWith(
+        feverCharge: 1.0,
+        isFeverActive: true,
+        feverTimeRemaining: 10.0,
+      );
+      _soundService.playFeverSound();
+    } else {
+      state = state.copyWith(feverCharge: newCharge);
+      _soundService.playCrossingHaptic();
+    }
+  }
+
+  /// Ticks down active fever timer or slowly decays idle charge
+  void tickFever(double dt) {
+    if (state.isFeverActive) {
+      final double remaining = state.feverTimeRemaining - dt;
+      if (remaining <= 0) {
+        state = state.copyWith(
+          isFeverActive: false,
+          feverTimeRemaining: 0.0,
+          feverCharge: 0.0,
+        );
+      } else {
+        state = state.copyWith(
+          feverTimeRemaining: remaining,
+          feverCharge: remaining / 10.0,
+        );
+      }
+    } else if (state.feverCharge > 0) {
+      // Slow passive decay (2.5% per second) if not tapping
+      final double decayed = max(0.0, state.feverCharge - (dt * 0.025));
+      state = state.copyWith(feverCharge: decayed);
+    }
+  }
+
 
   /// Buys base ship from shipyard
   bool purchaseShip() {
@@ -161,7 +205,7 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     return max(techBase, milestoneTier);
   }
 
-  /// Spawns a mystery cosmic supply crate directly onto an empty grid slot
+  /// Spawns a mystery cosmic supply crate directly onto an empty grid slot (waiting to be tapped!)
   bool dropMysteryCargo() {
     final int unlockedLimit = maxUnlockedGridSlots;
     final List<int> emptyIndices = [];
@@ -180,9 +224,28 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     final int awardedTier = minTier + random.nextInt(maxTier - minTier + 1);
 
     final newSlots = List<ShipModel?>.from(state.gridSlots);
-    newSlots[targetSlot] = ShipModel.create(awardedTier);
+    newSlots[targetSlot] = ShipModel.create(awardedTier, null, true); // isBox: true!
 
-    final int newHighest = max(state.highestTierUnlocked, awardedTier);
+    state = state.copyWith(
+      gridSlots: newSlots,
+    );
+
+    _soundService.playPurchaseSound();
+    _autoSaveDebounced();
+    return true;
+  }
+
+  /// Taps on a delivery crate to unbox the surprise ship inside!
+  bool openCrate(int index) {
+    if (index < 0 || index >= state.gridSlots.length) return false;
+    final ship = state.gridSlots[index];
+    if (ship == null || !ship.isBox) return false;
+
+    final newSlots = List<ShipModel?>.from(state.gridSlots);
+    final unboxedShip = ship.copyWith(isBox: false);
+    newSlots[index] = unboxedShip;
+
+    final int newHighest = max(state.highestTierUnlocked, unboxedShip.tier);
 
     state = state.copyWith(
       gridSlots: newSlots,
@@ -194,6 +257,7 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     _autoSaveDebounced();
     return true;
   }
+
 
   /// Calculates max unlocked merge slots (8 base + 2 per Hangar expansion level)
   int get maxUnlockedGridSlots {
@@ -270,21 +334,60 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
       final int newMergeCount = state.totalMergesCount + 1;
       final int newHighest = max(state.highestTierUnlocked, newTier);
 
+      final int now = DateTime.now().millisecondsSinceEpoch;
+      final bool isCombo = (now - state.lastMergeTimestamp) < 2500;
+      final int newComboCount = isCombo ? (state.comboCount + 1) : 1;
+
+      // Combo Credit Payout Bonus
+      double bonusCredits = 0.0;
+      String comboMessage = '';
+      if (newComboCount >= 2) {
+        final double comboMultiplier = 1.0 + (newComboCount * 0.5);
+        bonusCredits = mergedShip.calculateIncomePayout() * comboMultiplier * 3;
+        comboMessage = '$newComboCount' 'X MERGE COMBO!';
+      }
+
+      // 15% Chance on Combo >= 2 for Lucky Ship Duplication
+      bool luckyDuplicated = false;
+      if (newComboCount >= 2 && Random().nextDouble() < 0.18) {
+        // Find empty slot to spawn a free clone!
+        for (int i = 0; i < unlockedLimit; i++) {
+          if (newSlots[i] == null) {
+            newSlots[i] = ShipModel.create(newTier);
+            luckyDuplicated = true;
+            comboMessage = '$comboMessage ⚡ LUCKY CLONE!';
+            break;
+          }
+        }
+      }
+
       final updatedMissions = _evaluateMissions(
         state.career.missions,
         mergesIncrement: 1,
         unlockedTier: newTier,
+        coinsIncrement: bonusCredits,
       );
 
       state = state.copyWith(
+        credits: state.credits + bonusCredits,
+        lifetimeCredits: state.lifetimeCredits + bonusCredits,
         gridSlots: newSlots,
         trackShips: computeTrackFleet(newSlots),
         totalMergesCount: newMergeCount,
         highestTierUnlocked: newHighest,
+        comboCount: newComboCount,
+        lastMergeTimestamp: now,
+        lastComboMessage: comboMessage,
         career: state.career.copyWith(missions: updatedMissions),
       );
 
-      _soundService.playMergeSound();
+      if (luckyDuplicated) {
+        _soundService.playPrestigeSound();
+      } else if (newComboCount >= 2) {
+        _soundService.playComboSound(newComboCount);
+      } else {
+        _soundService.playMergeSound();
+      }
       _autoSaveDebounced();
       return true;
     } else {
@@ -299,12 +402,14 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
       _autoSaveDebounced();
       return true;
     }
+
   }
 
 
-  /// Derives active racing track fleet directly from grid slots (highest tiers first, max 6)
-  static List<ShipModel> computeTrackFleet(List<ShipModel?> gridSlots, {int maxTrackCapacity = 6}) {
-    final List<ShipModel> activeGridShips = gridSlots.whereType<ShipModel>().toList();
+  /// Derives active racing track fleet directly from grid slots (highest tiers first, max 4, ignoring unopened crates)
+  static List<ShipModel> computeTrackFleet(List<ShipModel?> gridSlots, {int maxTrackCapacity = 4}) {
+    final List<ShipModel> activeGridShips =
+        gridSlots.whereType<ShipModel>().where((s) => !s.isBox).toList();
     if (activeGridShips.isEmpty) {
       return [ShipModel.create(1)];
     }
@@ -312,6 +417,8 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     activeGridShips.sort((a, b) => b.tier.compareTo(a.tier));
     return activeGridShips.take(maxTrackCapacity).toList();
   }
+
+
 
 
 

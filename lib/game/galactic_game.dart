@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'dart:ui' as ui;
+import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import '../models/ship_model.dart';
@@ -17,9 +18,10 @@ typedef OnIncomeCallback = void Function(ShipModel ship);
 typedef OnAsteroidCallback = void Function(bool isDarkMatter, double rewardCredits);
 
 /// Core Flame Game engine orchestrating the 60 FPS neon track simulation.
-class GalacticGame extends FlameGame {
+class GalacticGame extends FlameGame with TapCallbacks {
   final OnIncomeCallback onIncomeEarned;
   final OnAsteroidCallback? onAsteroidDestroyed;
+  final VoidCallback? onCanvasTapped;
 
   late TrackComponent _track;
   late IncomeLineComponent _incomeLine;
@@ -27,16 +29,38 @@ class GalacticGame extends FlameGame {
 
   List<ShipModel> _currentShips = [];
   double _globalSpeedMultiplier = 1.0;
+  bool _isFeverActive = false;
   bool _isInitialized = false;
   double _asteroidTimer = 0.0;
+
 
   GalacticGame({
     required this.onIncomeEarned,
     this.onAsteroidDestroyed,
+    this.onCanvasTapped,
   });
 
   @override
   Color backgroundColor() => const Color(0xFF070913);
+
+  @override
+  void onTapDown(TapDownEvent event) {
+    super.onTapDown(event);
+    onCanvasTapped?.call();
+
+    // Spawn touch ripple & sparks
+    add(RadialShockwaveComponent(
+      position: event.canvasPosition,
+      color: const Color(0xFF00F5FF),
+      maxRadius: 28.0,
+      duration: 0.35,
+    ));
+    add(SparkBurstComponent(
+      position: event.canvasPosition,
+      baseColor: const Color(0xFF00F5FF),
+      count: 10,
+    ));
+  }
 
   @override
   Future<void> onLoad() async {
@@ -119,19 +143,21 @@ class GalacticGame extends FlameGame {
     if (identical(a, b)) return true;
     if (a.length != b.length) return false;
     for (int i = 0; i < a.length; i++) {
-      if (a[i].id != b[i].id || a[i].tier != b[i].tier) return false;
+      if (a[i].tier != b[i].tier) return false;
     }
     return true;
   }
 
-  /// Updates global speed multiplier (e.g. 2x boost active)
-  void setSpeedMultiplier(double multiplier) {
-    _globalSpeedMultiplier = multiplier;
+
+  /// Updates global speed multiplier (e.g. 2x boost active, fever mode)
+  void setSpeedMultiplier(double multiplier, {bool isFever = false}) {
+    _isFeverActive = isFever;
+    final double effectiveMultiplier = multiplier * (isFever ? 3.5 : 1.0);
+    _globalSpeedMultiplier = effectiveMultiplier;
     for (final shipComp in _activeShipComponents) {
-      shipComp.speedMultiplier = multiplier;
+      shipComp.speedMultiplier = effectiveMultiplier;
     }
   }
-
 
   void _syncShipsToTrack() {
     if (_track.pathMetric == null || _track.trackLength <= 0) return;
@@ -151,6 +177,15 @@ class GalacticGame extends FlameGame {
         comp.removeFromParent();
       }
       _activeShipComponents.clear();
+      return;
+    }
+
+    // In-place update: if component count matches fleet count, update models directly without teardown!
+    if (_activeShipComponents.length == _currentShips.length) {
+      for (int i = 0; i < _currentShips.length; i++) {
+        _activeShipComponents[i].updateShipModel(_currentShips[i]);
+        _activeShipComponents[i].speedMultiplier = _globalSpeedMultiplier;
+      }
       return;
     }
 
@@ -188,7 +223,6 @@ class GalacticGame extends FlameGame {
   }
 
 
-
   /// Called when any ship crosses the income laser line
   void _handleShipCrossing(ShipModel ship, Vector2 position) {
     // 1. Flash laser gate
@@ -197,30 +231,34 @@ class GalacticGame extends FlameGame {
     // 2. Radial shockwave
     add(RadialShockwaveComponent(
       position: position,
-      color: ship.glowColor,
-      maxRadius: 36.0,
-      duration: 0.45,
+      color: _isFeverActive ? const Color(0xFFFFD700) : ship.glowColor,
+      maxRadius: _isFeverActive ? 48.0 : 36.0,
+      duration: _isFeverActive ? 0.6 : 0.45,
     ));
 
     // 3. Spark burst
     add(SparkBurstComponent(
       position: position,
-      baseColor: ship.glowColor,
-      count: 16,
+      baseColor: _isFeverActive ? const Color(0xFFFF0055) : ship.glowColor,
+      count: _isFeverActive ? 24 : 16,
     ));
 
-    // 4. Floating Income Badge ("+$10.5M")
-    final double payout = ship.calculateIncomePayout(multiplier: _globalSpeedMultiplier);
-    final String formatted = '+${NumberFormatter.formatCredits(payout, decimals: 1)}';
+    // 4. Floating Income Badge ("+$10.5M" or "3X CRIT! +$31.5M")
+    final double feverBonus = _isFeverActive ? 3.0 : 1.0;
+    final double payout = ship.calculateIncomePayout(multiplier: _globalSpeedMultiplier * feverBonus);
+    final String formatted = _isFeverActive
+        ? '3X CRIT! +${NumberFormatter.formatCredits(payout, decimals: 1)}'
+        : '+${NumberFormatter.formatCredits(payout, decimals: 1)}';
 
     add(FloatingTextComponent(
       text: formatted,
       position: position + Vector2(0, -10),
-      glowColor: ship.glowColor,
-      duration: 1.2,
+      glowColor: _isFeverActive ? const Color(0xFFFFD700) : ship.glowColor,
+      duration: _isFeverActive ? 1.5 : 1.2,
     ));
 
     // 5. Notify Riverpod State
     onIncomeEarned(ship);
   }
 }
+

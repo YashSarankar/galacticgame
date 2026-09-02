@@ -11,7 +11,7 @@ typedef OnShipCrossLine = void Function(ShipModel ship, Vector2 position);
 
 /// Moving spacecraft component along a closed loop track metric.
 class MovingShipComponent extends PositionComponent {
-  final ShipModel ship;
+  ShipModel ship;
   final ui.PathMetric pathMetric;
   final double trackTotalLength;
   final double incomeLineOffset;
@@ -27,6 +27,8 @@ class MovingShipComponent extends PositionComponent {
   int _fireFrame = 0;
   double _fireAnimTimer = 0.0;
 
+  static final Map<String, Sprite> _cachedSprites = {};
+
   MovingShipComponent({
     required this.ship,
     required this.pathMetric,
@@ -35,6 +37,26 @@ class MovingShipComponent extends PositionComponent {
     required this.onCrossLine,
     this.currentDistance = 0.0,
   }) : super(size: Vector2(36, 36), anchor: Anchor.center);
+
+  /// Updates the ship tier in-place without removing from the Flame component tree
+  void updateShipModel(ShipModel newShip) {
+    if (ship.tier == newShip.tier && ship.spriteAsset == newShip.spriteAsset) return;
+    ship = newShip;
+    if (_cachedSprites.containsKey(newShip.spriteAsset)) {
+      _shipSprite = _cachedSprites[newShip.spriteAsset];
+    } else {
+      _loadSpriteForShip(newShip.spriteAsset);
+    }
+  }
+
+  Future<void> _loadSpriteForShip(String asset) async {
+    try {
+      Flame.images.prefix = '';
+      final ui.Image shipImage = await Flame.images.load(asset);
+      _shipSprite = Sprite(shipImage);
+      _cachedSprites[asset] = _shipSprite!;
+    } catch (_) {}
+  }
 
   /// Applies a temporary collision penalty (e.g. from hitting an asteroid hazard)
   void applySpeedPenalty(double factor, double duration) {
@@ -46,18 +68,27 @@ class MovingShipComponent extends PositionComponent {
   Future<void> onLoad() async {
     super.onLoad();
     try {
-      // Load Kenney ship sprite
       Flame.images.prefix = '';
-      final ui.Image shipImage = await Flame.images.load(ship.spriteAsset);
-      _shipSprite = Sprite(shipImage);
+      if (_cachedSprites.containsKey(ship.spriteAsset)) {
+        _shipSprite = _cachedSprites[ship.spriteAsset];
+      } else {
+        final ui.Image shipImage = await Flame.images.load(ship.spriteAsset);
+        _shipSprite = Sprite(shipImage);
+        _cachedSprites[ship.spriteAsset] = _shipSprite!;
+      }
 
-      // Load thruster flame sprite
-      final ui.Image fireImage = await Flame.images.load('assets/kenney_space-shooter-remastered/PNG/Effects/fire00.png');
-      _fireSprite = Sprite(fireImage);
+      if (_cachedSprites.containsKey('fire00')) {
+        _fireSprite = _cachedSprites['fire00'];
+      } else {
+        final ui.Image fireImage = await Flame.images.load('assets/kenney_space-shooter-remastered/PNG/Effects/fire00.png');
+        _fireSprite = Sprite(fireImage);
+        _cachedSprites['fire00'] = _fireSprite!;
+      }
     } catch (e) {
       debugPrint('[MovingShipComponent] Error loading sprite ${ship.spriteAsset}: $e');
     }
   }
+
 
   @override
   void update(double dt) {
@@ -118,7 +149,7 @@ class MovingShipComponent extends PositionComponent {
 
     // Spawn trailing cosmic engine sparks
     _trailTimer += dt;
-    if (_trailTimer >= 0.05) {
+    if (_trailTimer >= 0.12) {
       _trailTimer = 0.0;
       _spawnExhaustSparks();
     }
@@ -134,18 +165,21 @@ class MovingShipComponent extends PositionComponent {
     final spark = SparkBurstComponent(
       position: sparkPos,
       baseColor: ship.glowColor,
-      count: 2,
+      count: 1,
     );
     parent!.add(spark);
   }
 
   @override
   void render(Canvas canvas) {
-    // Draw Engine Glow Aura
-    final auraPaint = Paint()
-      ..color = ship.glowColor.withAlpha((0.35 * 255).round())
-      ..maskFilter = const MaskFilter.blur(BlurStyle.solid, 10.0);
-    canvas.drawCircle(Offset(size.x / 2, size.y / 2), size.x / 2, auraPaint);
+    // Smooth layered glow without costly MaskFilter
+    final outerAuraPaint = Paint()
+      ..color = ship.glowColor.withAlpha((0.15 * 255).round());
+    canvas.drawCircle(Offset(size.x / 2, size.y / 2), size.x * 0.7, outerAuraPaint);
+
+    final innerAuraPaint = Paint()
+      ..color = ship.glowColor.withAlpha((0.35 * 255).round());
+    canvas.drawCircle(Offset(size.x / 2, size.y / 2), size.x * 0.45, innerAuraPaint);
 
     // Draw Animated Thruster Flame behind ship
     if (_fireSprite != null) {
@@ -165,17 +199,11 @@ class MovingShipComponent extends PositionComponent {
     if (_shipSprite != null) {
       _shipSprite!.render(canvas, size: size);
     } else {
-      // Fallback glowing vector ship
       final shipPaint = Paint()
         ..color = ship.glowColor
         ..style = PaintingStyle.fill;
-      final path = ui.Path()
-        ..moveTo(size.x / 2, 0)
-        ..lineTo(size.x, size.y)
-        ..lineTo(size.x / 2, size.y * 0.75)
-        ..lineTo(0, size.y)
-        ..close();
-      canvas.drawPath(path, shipPaint);
+      canvas.drawCircle(Offset(size.x / 2, size.y / 2), 12, shipPaint);
     }
   }
 }
+

@@ -12,6 +12,12 @@ class GameState {
   final int totalMergesCount;
   final int totalLineCrossings;
   final int highestTierUnlocked;
+  final double feverCharge; // 0.0 to 1.0 (Tap Frenzy Meter)
+  final bool isFeverActive; // Whether Hyperspace Fever Rush is active
+  final double feverTimeRemaining; // Seconds remaining in active fever mode
+  final int comboCount; // Merge combo chain counter (e.g. 2x, 3x, 4x)
+  final int lastMergeTimestamp; // Milliseconds for chaining combos
+  final String lastComboMessage; // e.g. "3X ULTRA COMBO!"
   final int lastSaveTimestamp; // Epoch milliseconds for offline earnings math
   final List<ShipModel?> gridSlots; // 16 items for 4x4 matrix
   final List<ShipModel> trackShips; // Active ships racing on Flame track
@@ -25,6 +31,12 @@ class GameState {
     required this.totalMergesCount,
     required this.totalLineCrossings,
     required this.highestTierUnlocked,
+    this.feverCharge = 0.0,
+    this.isFeverActive = false,
+    this.feverTimeRemaining = 0.0,
+    this.comboCount = 0,
+    this.lastMergeTimestamp = 0,
+    this.lastComboMessage = '',
     required this.lastSaveTimestamp,
     required this.gridSlots,
     required this.trackShips,
@@ -45,6 +57,12 @@ class GameState {
       totalMergesCount: 0,
       totalLineCrossings: 0,
       highestTierUnlocked: 1,
+      feverCharge: 0.0,
+      isFeverActive: false,
+      feverTimeRemaining: 0.0,
+      comboCount: 0,
+      lastMergeTimestamp: 0,
+      lastComboMessage: '',
       lastSaveTimestamp: DateTime.now().millisecondsSinceEpoch,
       gridSlots: slots,
       trackShips: [ShipModel.create(1)],
@@ -66,6 +84,12 @@ class GameState {
     int? totalMergesCount,
     int? totalLineCrossings,
     int? highestTierUnlocked,
+    double? feverCharge,
+    bool? isFeverActive,
+    double? feverTimeRemaining,
+    int? comboCount,
+    int? lastMergeTimestamp,
+    String? lastComboMessage,
     int? lastSaveTimestamp,
     List<ShipModel?>? gridSlots,
     List<ShipModel>? trackShips,
@@ -79,6 +103,12 @@ class GameState {
       totalMergesCount: totalMergesCount ?? this.totalMergesCount,
       totalLineCrossings: totalLineCrossings ?? this.totalLineCrossings,
       highestTierUnlocked: highestTierUnlocked ?? this.highestTierUnlocked,
+      feverCharge: feverCharge ?? this.feverCharge,
+      isFeverActive: isFeverActive ?? this.isFeverActive,
+      feverTimeRemaining: feverTimeRemaining ?? this.feverTimeRemaining,
+      comboCount: comboCount ?? this.comboCount,
+      lastMergeTimestamp: lastMergeTimestamp ?? this.lastMergeTimestamp,
+      lastComboMessage: lastComboMessage ?? this.lastComboMessage,
       lastSaveTimestamp: lastSaveTimestamp ?? this.lastSaveTimestamp,
       gridSlots: gridSlots ?? this.gridSlots,
       trackShips: trackShips ?? this.trackShips,
@@ -111,6 +141,12 @@ class GameState {
       totalMergesCount: json['totalMergesCount'] as int? ?? 0,
       totalLineCrossings: json['totalLineCrossings'] as int? ?? 0,
       highestTierUnlocked: json['highestTierUnlocked'] as int? ?? 1,
+      feverCharge: 0.0,
+      isFeverActive: false,
+      feverTimeRemaining: 0.0,
+      comboCount: 0,
+      lastMergeTimestamp: 0,
+      lastComboMessage: '',
       lastSaveTimestamp: json['lastSaveTimestamp'] as int? ??
           DateTime.now().millisecondsSinceEpoch,
       gridSlots: json['gridSlots'] != null
@@ -129,4 +165,5 @@ class GameState {
     );
   }
 }
+
 

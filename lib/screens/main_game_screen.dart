@@ -33,6 +33,7 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
   bool _isBannerAdLoaded = false;
   bool _hasCheckedOffline = false;
   Timer? _cargoDropTimer;
+  Timer? _feverTimer;
 
   @override
   void initState() {
@@ -50,12 +51,22 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
             .read(gameStateProvider.notifier)
             .recordAsteroidShattered(isDarkMatter: isDM, rewardCredits: reward);
       },
+      onCanvasTapped: () {
+        ref.read(gameStateProvider.notifier).tapRacetrackBoost();
+      },
     );
 
     // Periodic Mystery Cosmic Cargo Crate Drops (Every 38 seconds)
     _cargoDropTimer = Timer.periodic(const Duration(seconds: 38), (_) {
       if (mounted) {
         ref.read(gameStateProvider.notifier).dropMysteryCargo();
+      }
+    });
+
+    // Real-time Fever ticker (100ms interval for fluid decay & countdown)
+    _feverTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
+      if (mounted) {
+        ref.read(gameStateProvider.notifier).tickFever(0.1);
       }
     });
 
@@ -75,6 +86,7 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
   @override
   void dispose() {
     _cargoDropTimer?.cancel();
+    _feverTimer?.cancel();
     _bannerAd?.dispose();
     super.dispose();
   }
@@ -119,9 +131,12 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
     final gameState = ref.watch(gameStateProvider);
     final adState = ref.watch(adStateProvider);
 
-    // Sync active track ships with Flame Game engine
+    // Sync active track ships and fever mode with Flame Game engine
     _galacticGame.updateShips(gameState.trackShips);
-    _galacticGame.setSpeedMultiplier(adState.isSpeedBoostActive ? 2.0 : 1.0);
+    _galacticGame.setSpeedMultiplier(
+      adState.isSpeedBoostActive ? 2.0 : 1.0,
+      isFever: gameState.isFeverActive,
+    );
 
     // Base drop tier & discount calculations for store
     final discountSkill = gameState.career.skills.firstWhere(
@@ -169,7 +184,13 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
             // 3. Active Mission Strip
             _buildActiveMissionBar(gameState),
 
-            // 4. Center Flame Canvas (Racetrack)
+            // 4. Hyperdrive Warp Meter Bar (Unobstructed above circuit)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+              child: _buildWarpMeterBar(gameState),
+            ),
+
+            // 5. Center Flame Canvas (Racetrack)
             Expanded(
               flex: 7,
               child: Container(
@@ -177,23 +198,30 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color: GameTheme.neonCyan.withAlpha((0.3 * 255).round()),
-                    width: 1.5,
+                    color: gameState.isFeverActive
+                        ? const Color(0xFFFFD700)
+                        : GameTheme.neonCyan.withAlpha((0.3 * 255).round()),
+                    width: gameState.isFeverActive ? 2.0 : 1.5,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: GameTheme.neonCyan.withAlpha((0.15 * 255).round()),
-                      blurRadius: 12,
-                      spreadRadius: 1,
+                      color: gameState.isFeverActive
+                          ? const Color(0xFFFF0055).withAlpha((0.35 * 255).round())
+                          : GameTheme.neonCyan.withAlpha((0.15 * 255).round()),
+                      blurRadius: gameState.isFeverActive ? 18 : 12,
+                      spreadRadius: gameState.isFeverActive ? 2 : 1,
                     )
                   ],
                 ),
                 clipBehavior: Clip.antiAlias,
-                child: GameWidget(game: _galacticGame),
+                child: GameWidget(
+                  key: const ValueKey('galactic_flame_game_canvas'),
+                  game: _galacticGame,
+                ),
               ),
             ),
 
-            // 5. Interactive 4x4 Merge Grid UI
+            // 6. Interactive 4x4 Merge Grid UI
             Expanded(
               flex: 10,
               child: Padding(
@@ -201,6 +229,7 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
                 child: _buildMergeGrid(gameState),
               ),
             ),
+
 
 
             // 6. Bottom Action Deck (Buy Ship, Speed Boost, Tech Tree, Missions)
@@ -567,36 +596,132 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
     );
   }
 
+  Widget _buildWarpMeterBar(GameState state) {
+    final bool isFever = state.isFeverActive;
+    final double progress = isFever
+        ? (state.feverTimeRemaining / 10.0).clamp(0.0, 1.0)
+        : state.feverCharge.clamp(0.0, 1.0);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.black.withAlpha((0.75 * 255).round()),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isFever
+              ? const Color(0xFFFFD700)
+              : GameTheme.neonCyan.withAlpha((0.5 * 255).round()),
+          width: isFever ? 1.5 : 1.0,
+        ),
+        boxShadow: isFever
+            ? [
+                const BoxShadow(
+                  color: Color(0xFFFF0055),
+                  blurRadius: 10,
+                  spreadRadius: 1,
+                )
+              ]
+            : null,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    isFever
+                        ? Icons.local_fire_department_rounded
+                        : Icons.bolt_rounded,
+                    color: isFever
+                        ? const Color(0xFFFF0055)
+                        : GameTheme.neonCyan,
+                    size: 13,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    isFever
+                        ? '🔥 HYPERSPACE WARP: 3.5X SPEED & 3X CRITS!'
+                        : 'TAP CIRCUIT TO CHARGE WARP RUSH',
+                    style: TextStyle(
+                      color: isFever
+                          ? const Color(0xFFFFD700)
+                          : Colors.white70,
+                      fontSize: 8.0,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                isFever
+                    ? '${state.feverTimeRemaining.toStringAsFixed(1)}s'
+                    : '${(state.feverCharge * 100).toInt()}%',
+                style: TextStyle(
+                  color: isFever
+                      ? const Color(0xFFFF0055)
+                      : GameTheme.neonCyan,
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 3.5,
+              backgroundColor: Colors.white10,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                isFever ? const Color(0xFFFF0055) : GameTheme.neonCyan,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMergeGrid(GameState state) {
     final int maxUnlocked =
         ref.watch(gameStateProvider.notifier).maxUnlockedGridSlots;
 
-    return Container(
-      decoration: GameTheme.glassCard(
-        borderColor: GameTheme.cardBorder,
-        radius: 16,
-      ),
-      padding: const EdgeInsets.all(6),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final double availableW = constraints.maxWidth;
-          final double availableH = constraints.maxHeight;
-          final double cellW = (availableW - (3 * 6)) / 4;
-          final double cellH = (availableH - (3 * 6)) / 4;
-          final double aspectRatio = (cellW > 0 && cellH > 0) ? (cellW / cellH) : 1.0;
+    return Stack(
+      children: [
+        Container(
+          decoration: GameTheme.glassCard(
+            borderColor: GameTheme.cardBorder,
+            radius: 16,
+          ),
+          padding: const EdgeInsets.all(6),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final double availableW = constraints.maxWidth;
+              final double availableH = constraints.maxHeight;
+              final double cellW = (availableW - (3 * 6)) / 4;
+              final double cellH = (availableH - (3 * 6)) / 4;
+              final double aspectRatio =
+                  (cellW > 0 && cellH > 0) ? (cellW / cellH) : 1.0;
 
-          return GridView.builder(
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: 16,
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 4,
-              crossAxisSpacing: 6,
-              mainAxisSpacing: 6,
-              childAspectRatio: aspectRatio,
-            ),
-            itemBuilder: (context, index) {
-              final bool isLocked = index >= maxUnlocked;
-              final ShipModel? ship = isLocked ? null : state.gridSlots[index];
+              return GridView.builder(
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: 16,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 4,
+                  crossAxisSpacing: 6,
+                  mainAxisSpacing: 6,
+                  childAspectRatio: aspectRatio,
+                ),
+                itemBuilder: (context, index) {
+                  final bool isLocked = index >= maxUnlocked;
+                  final ShipModel? ship =
+                      isLocked ? null : state.gridSlots[index];
+
 
               if (isLocked) {
                 return Container(
@@ -668,18 +793,26 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
                           : null,
                     ),
                     child: ship != null
-                        ? Draggable<int>(
-                            data: index,
-                            feedback: Material(
-                              color: Colors.transparent,
-                              child: _buildShipTileContent(ship, isDragging: true),
-                            ),
-                            childWhenDragging: Opacity(
-                              opacity: 0.25,
-                              child: _buildShipTileContent(ship),
-                            ),
-                            child: _buildShipTileContent(ship),
-                          )
+                        ? (ship.isBox
+                            ? GestureDetector(
+                                onTap: () => ref
+                                    .read(gameStateProvider.notifier)
+                                    .openCrate(index),
+                                child: _buildCrateTileContent(),
+                              )
+                            : Draggable<int>(
+                                data: index,
+                                feedback: Material(
+                                  color: Colors.transparent,
+                                  child: _buildShipTileContent(ship,
+                                      isDragging: true),
+                                ),
+                                childWhenDragging: Opacity(
+                                  opacity: 0.25,
+                                  child: _buildShipTileContent(ship),
+                                ),
+                                child: _buildShipTileContent(ship),
+                              ))
                         : const Center(
                             child: Icon(
                               Icons.add,
@@ -694,8 +827,48 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
           );
         },
       ),
-    );
-  }
+    ),
+
+    if (state.lastComboMessage.isNotEmpty)
+      Positioned(
+        top: 8,
+        left: 0,
+        right: 0,
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.black.withAlpha((0.88 * 255).round()),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: const Color(0xFFFFD700),
+                width: 1.5,
+              ),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0xFFFF0055),
+                  blurRadius: 12,
+                  spreadRadius: 1,
+                )
+              ],
+            ),
+            child: Text(
+              state.lastComboMessage,
+              style: const TextStyle(
+                color: Color(0xFFFFD700),
+                fontSize: 10.5,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0.6,
+              ),
+            ),
+          ),
+        ),
+      ),
+  ],
+);
+}
+
+
 
   Widget _buildShipTileContent(ShipModel ship, {bool isDragging = false}) {
     return LayoutBuilder(
@@ -769,6 +942,75 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
       },
     );
   }
+
+  Widget _buildCrateTileContent() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double maxDim = min(constraints.maxWidth, constraints.maxHeight);
+        final double iconSize = max(20.0, maxDim - 6.0);
+
+        return Center(
+          child: SizedBox(
+            width: iconSize,
+            height: iconSize,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Glowing Gold Aura
+                Container(
+                  width: iconSize * 0.8,
+                  height: iconSize * 0.8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFFFFD700)
+                        .withAlpha((0.25 * 255).round()),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFFF0055)
+                            .withAlpha((0.45 * 255).round()),
+                        blurRadius: 8,
+                        spreadRadius: 1,
+                      )
+                    ],
+                  ),
+                ),
+
+                // Crate Icon
+                Icon(
+                  Icons.card_giftcard_rounded,
+                  color: const Color(0xFFFFD700),
+                  size: iconSize * 0.65,
+                ),
+
+                // "TAP OPEN" Badge
+                Positioned(
+                  bottom: 0,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFF0055),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'TAP OPEN',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 6.5,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
 
   Widget _buildBottomActionBar({
     required GameState gameState,

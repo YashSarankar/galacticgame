@@ -54,4 +54,30 @@ class SoundService {
       HapticFeedback.vibrate();
     }
   }
+
+  /// Play merge combo chime with intensifying haptic feedback
+  void playComboSound(int comboCount) {
+    if (isMuted) return;
+    if (isHapticsEnabled) {
+      if (comboCount >= 3) {
+        HapticFeedback.heavyImpact();
+      } else {
+        HapticFeedback.mediumImpact();
+      }
+    }
+    SystemSound.play(SystemSoundType.click);
+  }
+
+  /// Play hyperspace fever activation rush
+  void playFeverSound() {
+    if (isMuted) return;
+    if (isHapticsEnabled) {
+      HapticFeedback.heavyImpact();
+      Future.delayed(const Duration(milliseconds: 100), () {
+        HapticFeedback.vibrate();
+      });
+    }
+    SystemSound.play(SystemSoundType.alert);
+  }
 }
+
