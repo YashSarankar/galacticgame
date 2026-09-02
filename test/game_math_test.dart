@@ -144,6 +144,28 @@ void main() {
       expect(notifier.state.activeBoss, isNull); // Defeated and cleared
       expect(notifier.state.darkMatter > prevDm, true); // Awarded bounty Dark Matter
     });
+
+    test('Relic Matrix tracks shards, levels up, and applies passive multipliers', () {
+      final notifier = GameEconomyNotifier(GameState.initial());
+      expect(notifier.state.relics.isNotEmpty, true);
+
+      final chronosRelic = notifier.state.relics.firstWhere((r) => r.id == 'relic_chronos_core');
+      expect(chronosRelic.level, 1);
+      expect(notifier.relicSpeedMultiplier, 1.15); // +15%
+
+      // Award shards
+      notifier.awardRelicShards('relic_chronos_core', 6);
+      final updatedRelic = notifier.state.relics.firstWhere((r) => r.id == 'relic_chronos_core');
+      expect(updatedRelic.shards, 6);
+      expect(updatedRelic.canUpgrade, true);
+
+      // Upgrade to Level 2
+      final upgraded = notifier.upgradeRelic('relic_chronos_core');
+      expect(upgraded, true);
+      expect(notifier.state.relics.firstWhere((r) => r.id == 'relic_chronos_core').level, 2);
+      expect(notifier.relicSpeedMultiplier, 1.30); // +30%
+    });
   });
 }
+
 

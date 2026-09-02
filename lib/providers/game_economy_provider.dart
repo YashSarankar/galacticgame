@@ -3,11 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/game_state.dart';
 import '../models/ship_model.dart';
 import '../models/boss_model.dart';
+import '../models/relic_model.dart';
 import '../models/mission_model.dart';
 import '../models/skill_node_model.dart';
 import '../models/career_model.dart';
 import '../services/sound_service.dart';
 import '../services/storage_service.dart';
+
 
 
 class GameEconomyNotifier extends StateNotifier<GameState> {
@@ -41,8 +43,12 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     final double permanentMultiplier = 1.0 + incomeSkill.currentBonusValue;
     final double feverMultiplier = state.isFeverActive ? 3.0 : 1.0;
     final double totalPayout = ship.calculateIncomePayout(
-      multiplier: permanentMultiplier * adMultiplier * feverMultiplier,
+      multiplier: permanentMultiplier *
+          adMultiplier *
+          feverMultiplier *
+          relicIncomeMultiplier,
     );
+
 
     final int newCrossings = state.totalLineCrossings + 1;
     final double newCredits = state.credits + totalPayout;
@@ -608,12 +614,117 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     _autoSaveDebounced();
   }
 
+  /// Active permanent relic multipliers
+  double get relicSpeedMultiplier {
+    final relic = state.relics.firstWhere(
+      (r) => r.effectType == RelicEffectType.speedBoost,
+      orElse: () => const RelicModel(
+        id: '',
+        name: '',
+        description: '',
+        iconCodePoint: 0,
+        rarity: RelicRarity.rare,
+        effectType: RelicEffectType.speedBoost,
+        baseBonus: 0,
+        bonusPerLevel: 0,
+      ),
+    );
+    return 1.0 + relic.currentBonusValue;
+  }
+
+  double get relicIncomeMultiplier {
+    final relic = state.relics.firstWhere(
+      (r) => r.effectType == RelicEffectType.incomeBoost,
+      orElse: () => const RelicModel(
+        id: '',
+        name: '',
+        description: '',
+        iconCodePoint: 0,
+        rarity: RelicRarity.cosmic,
+        effectType: RelicEffectType.incomeBoost,
+        baseBonus: 0,
+        bonusPerLevel: 0,
+      ),
+    );
+    return 1.0 + relic.currentBonusValue;
+  }
+
+  double get relicDarkMatterMultiplier {
+    final relic = state.relics.firstWhere(
+      (r) => r.effectType == RelicEffectType.darkMatterBoost,
+      orElse: () => const RelicModel(
+        id: '',
+        name: '',
+        description: '',
+        iconCodePoint: 0,
+        rarity: RelicRarity.epic,
+        effectType: RelicEffectType.darkMatterBoost,
+        baseBonus: 0,
+        bonusPerLevel: 0,
+      ),
+    );
+    return 1.0 + relic.currentBonusValue;
+  }
+
+  double get relicBossTapDamageBonus {
+    final relic = state.relics.firstWhere(
+      (r) => r.effectType == RelicEffectType.bossTapDamage,
+      orElse: () => const RelicModel(
+        id: '',
+        name: '',
+        description: '',
+        iconCodePoint: 0,
+        rarity: RelicRarity.epic,
+        effectType: RelicEffectType.bossTapDamage,
+        baseBonus: 0,
+        bonusPerLevel: 0,
+      ),
+    );
+    return 1.0 + relic.currentBonusValue;
+  }
+
+  /// Upgrades an Ancient Alien Relic using duplicate shards
+  bool upgradeRelic(String relicId) {
+    final index = state.relics.indexWhere((r) => r.id == relicId);
+    if (index == -1) return false;
+    final relic = state.relics[index];
+    if (!relic.canUpgrade) return false;
+
+    final cost = relic.shardsNeededForNext;
+    final updated = relic.copyWith(
+      level: relic.level + 1,
+      shards: relic.shards - cost,
+    );
+    final newRelics = List<RelicModel>.from(state.relics);
+    newRelics[index] = updated;
+
+    state = state.copyWith(relics: newRelics);
+    _soundService.playPrestigeSound();
+    _autoSaveDebounced();
+    return true;
+  }
+
+  /// Awards shards of a specific artifact
+  void awardRelicShards(String relicId, int count) {
+    final index = state.relics.indexWhere((r) => r.id == relicId);
+    if (index == -1) return;
+    final relic = state.relics[index];
+    final updated = relic.copyWith(shards: relic.shards + count);
+    final newRelics = List<RelicModel>.from(state.relics);
+    newRelics[index] = updated;
+
+    state = state.copyWith(relics: newRelics);
+    _autoSaveDebounced();
+  }
+
   /// Deals damage to the active Alien Boss (from fleet auto-lasers or player tap-strikes)
   void damageBoss(double damage, {bool isTap = false}) {
     final boss = state.activeBoss;
     if (boss == null || boss.isDead) return;
 
-    final double newHp = max(0.0, boss.currentHealth - damage);
+    final double effectiveDmg =
+        isTap ? (damage * relicBossTapDamageBonus) : damage;
+    final double newHp = max(0.0, boss.currentHealth - effectiveDmg);
     final updatedBoss = boss.copyWith(currentHealth: newHp);
 
     if (newHp <= 0.0) {
@@ -637,13 +748,13 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     }
   }
 
-  /// Handles Boss Defeat: Supernova payout (Dark Matter, massive credits, and high-tier crate)
+  /// Handles Boss Defeat: Supernova payout (Dark Matter, massive credits, relic shard, and high-tier crate)
   void recordBossDefeated() {
     final boss = state.activeBoss;
     if (boss == null) return;
 
     final double rewardCoins = boss.bountyCredits;
-    final double rewardDm = boss.bountyDarkMatter;
+    final double rewardDm = boss.bountyDarkMatter * relicDarkMatterMultiplier;
 
     state = state.copyWith(
       credits: state.credits + rewardCoins,
@@ -652,12 +763,19 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
       clearActiveBoss: true,
     );
 
+    // 60% chance to drop an Ancient Alien Relic Shard
+    if (Random().nextDouble() < 0.60 && state.relics.isNotEmpty) {
+      final randomRelic = state.relics[Random().nextInt(state.relics.length)];
+      awardRelicShards(randomRelic.id, 1);
+    }
+
     // Drop free high-tier mystery crate on flight deck
     dropMysteryCargo();
 
     _soundService.playPrestigeSound();
     _autoSaveDebounced();
   }
+
 
   /// Evaluates and advances missions based on actions
 

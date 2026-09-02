@@ -2,6 +2,7 @@ import 'dart:math';
 import 'ship_model.dart';
 import 'career_model.dart';
 import 'boss_model.dart';
+import 'relic_model.dart';
 
 /// Complete persistent state of the Galactic Merge Idle game.
 class GameState {
@@ -22,6 +23,7 @@ class GameState {
   final int lastSaveTimestamp; // Epoch milliseconds for offline earnings math
   final List<ShipModel?> gridSlots; // 16 items for 4x4 matrix
   final List<ShipModel> trackShips; // Active ships racing on Flame track
+  final List<RelicModel> relics; // Discovered Ancient Alien Relics
   final CareerModel career;
 
   const GameState({
@@ -42,9 +44,9 @@ class GameState {
     required this.lastSaveTimestamp,
     required this.gridSlots,
     required this.trackShips,
+    required this.relics,
     required this.career,
   });
-
 
   /// Factory for fresh game state
   factory GameState.initial() {
@@ -69,9 +71,11 @@ class GameState {
       lastSaveTimestamp: DateTime.now().millisecondsSinceEpoch,
       gridSlots: slots,
       trackShips: [ShipModel.create(1)],
+      relics: RelicModel.getInitialRelics(),
       career: CareerModel.initial(),
     );
   }
+
 
   /// Calculates potential Dark Matter on Galactic Reset: 150 * sqrt(Lifetime / 1e7)
   double get potentialPrestigeDarkMatter {
@@ -98,6 +102,7 @@ class GameState {
     int? lastSaveTimestamp,
     List<ShipModel?>? gridSlots,
     List<ShipModel>? trackShips,
+    List<RelicModel>? relics,
     CareerModel? career,
   }) {
     return GameState(
@@ -118,6 +123,7 @@ class GameState {
       lastSaveTimestamp: lastSaveTimestamp ?? this.lastSaveTimestamp,
       gridSlots: gridSlots ?? this.gridSlots,
       trackShips: trackShips ?? this.trackShips,
+      relics: relics ?? this.relics,
       career: career ?? this.career,
     );
   }
@@ -135,6 +141,7 @@ class GameState {
       'lastSaveTimestamp': lastSaveTimestamp,
       'gridSlots': gridSlots.map((s) => s?.toJson()).toList(),
       'trackShips': trackShips.map((s) => s.toJson()).toList(),
+      'relics': relics.map((r) => r.toJson()).toList(),
       'career': career.toJson(),
     };
   }
@@ -169,12 +176,18 @@ class GameState {
               .map((s) => ShipModel.fromJson(s as Map<String, dynamic>))
               .toList()
           : [ShipModel.create(1)],
+      relics: json['relics'] != null
+          ? (json['relics'] as List)
+              .map((r) => RelicModel.fromJson(r as Map<String, dynamic>))
+              .toList()
+          : RelicModel.getInitialRelics(),
       career: json['career'] != null
           ? CareerModel.fromJson(json['career'] as Map<String, dynamic>)
           : CareerModel.initial(),
     );
   }
 }
+
 
 
 

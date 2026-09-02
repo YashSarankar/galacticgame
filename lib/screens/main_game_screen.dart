@@ -20,8 +20,10 @@ import 'modals/offline_earnings_modal.dart';
 import 'modals/prestige_modal.dart';
 import 'modals/skill_tree_modal.dart';
 import 'modals/discovery_modal.dart';
+import 'modals/relics_modal.dart';
 
 class MainGameScreen extends ConsumerStatefulWidget {
+
   const MainGameScreen({super.key});
 
   @override
@@ -1311,9 +1313,19 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen> {
               _openGameModal((ctx) => const MissionsModal());
             },
           ),
+          const SizedBox(width: 6),
 
-
+          // 4. Relics Vault Button
+          _buildActionButton(
+            icon: Icons.auto_awesome_rounded,
+            label: 'RELICS',
+            color: const Color(0xFFBD00FF),
+            onTap: () {
+              _openGameModal((ctx) => const RelicsModal());
+            },
+          ),
           const SizedBox(width: 8),
+
 
           // 3. 2X Track Speed Boost Button (Rewarded Ad)
           _buildActionButton(
