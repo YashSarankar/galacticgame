@@ -6,6 +6,8 @@ import '../../services/storage_service.dart';
 import '../../utils/game_theme.dart';
 import '../../utils/number_formatter.dart';
 import '../../models/game_state.dart';
+import 'membership_plans_modal.dart';
+
 
 /// Settings & Commander Lifetime Career Dossier Modal
 class SettingsModal extends ConsumerStatefulWidget {
@@ -19,12 +21,14 @@ class _SettingsModalState extends ConsumerState<SettingsModal> {
   final SoundService _soundService = SoundService();
   late bool _soundMuted;
   late bool _hapticsEnabled;
+  late double _bgmVolume;
 
   @override
   void initState() {
     super.initState();
     _soundMuted = _soundService.isMuted;
     _hapticsEnabled = _soundService.isHapticsEnabled;
+    _bgmVolume = _soundService.bgmVolume;
   }
 
   void _toggleSound(bool value) {
@@ -34,6 +38,9 @@ class _SettingsModalState extends ConsumerState<SettingsModal> {
     _soundService.setMuted(!value);
     if (value) {
       _soundService.playPurchaseSound();
+      _soundService.resumeBgm();
+    } else {
+      _soundService.pauseBgm();
     }
   }
 
@@ -46,6 +53,7 @@ class _SettingsModalState extends ConsumerState<SettingsModal> {
       _soundService.playMergeHaptic();
     }
   }
+
 
   void _showResetConfirmation(BuildContext context) {
     final notifier = ref.read(gameStateProvider.notifier);
@@ -188,14 +196,14 @@ class _SettingsModalState extends ConsumerState<SettingsModal> {
                     SwitchListTile(
                       activeThumbColor: const Color(0xFF00F0FF),
                       title: const Text(
-                        'Sound Effects (SFX)',
+                        'Sound & Music (BGM / SFX)',
                         style: TextStyle(
                             color: Colors.white,
                             fontSize: 12.5,
                             fontWeight: FontWeight.bold),
                       ),
                       subtitle: Text(
-                        _soundMuted ? 'Muted' : 'Enabled',
+                        _soundMuted ? 'Muted' : 'Cosmic Synthwave Active',
                         style: const TextStyle(
                             color: Colors.white54, fontSize: 10.5),
                       ),
@@ -210,7 +218,53 @@ class _SettingsModalState extends ConsumerState<SettingsModal> {
                       value: !_soundMuted,
                       onChanged: _toggleSound,
                     ),
+                    if (!_soundMuted) ...[
+                      const Divider(color: Colors.white10, height: 1),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.music_note_rounded,
+                                color: Color(0xFF00F0FF), size: 16),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Music Volume',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Expanded(
+                              child: Slider(
+                                value: _bgmVolume,
+                                min: 0.0,
+                                max: 1.0,
+                                activeColor: const Color(0xFF00F0FF),
+                                inactiveColor: Colors.white12,
+                                onChanged: (val) {
+                                  setState(() {
+                                    _bgmVolume = val;
+                                  });
+                                  _soundService.setBgmVolume(val);
+                                },
+                              ),
+                            ),
+                            Text(
+                              '${(_bgmVolume * 100).round()}%',
+                              style: const TextStyle(
+                                color: Color(0xFF00F0FF),
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const Divider(color: Colors.white10, height: 1),
+
                     SwitchListTile(
                       activeThumbColor: const Color(0xFF00FF88),
                       title: const Text(
@@ -281,14 +335,46 @@ class _SettingsModalState extends ConsumerState<SettingsModal> {
               ),
               const SizedBox(height: 16),
 
-              // Section 3: Data Management & Reset
-              _buildSectionHeader('DATA MANAGEMENT'),
+              // VIP Membership Plans Button
+              ElevatedButton.icon(
+                icon: const Icon(Icons.workspace_premium_rounded,
+                    color: Colors.black, size: 18),
+                label: Text(
+                  gameState.hasRemovedAds
+                      ? 'VIP COMMANDER PASS (ACTIVE)'
+                      : 'VIEW COMMISSION PLANS (CADET vs VIP)',
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: gameState.hasRemovedAds
+                      ? const Color(0xFF00FF88)
+                      : const Color(0xFFFFD700),
+                  minimumSize: const Size(double.infinity, 42),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => const MembershipPlansModal(),
+                  );
+                },
+              ),
+              const SizedBox(height: 10),
+
+              // Section 3: Game Data Management
+              _buildSectionHeader('GAME DATA & PROGRESSION'),
               const SizedBox(height: 8),
 
               OutlinedButton.icon(
                 onPressed: () => _showResetConfirmation(context),
                 icon: const Icon(Icons.delete_forever_rounded,
-
                     color: Color(0xFFFF0055), size: 16),
                 label: const Text(
                   'RESET ALL GAME PROGRESS',

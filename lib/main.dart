@@ -2,8 +2,9 @@ import 'package:flame/flame.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'screens/main_game_screen.dart';
+import 'screens/splash_screen.dart';
 import 'services/ad_manager.dart';
+
 import 'services/storage_service.dart';
 import 'utils/game_theme.dart';
 
@@ -47,7 +48,7 @@ class GalacticMergeApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Galactic Merge Idle',
+      title: 'Galactic Merge: Space Tycoon',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: GameTheme.backgroundVoid,
@@ -61,7 +62,8 @@ class GalacticMergeApp extends StatelessWidget {
               displayColor: GameTheme.textPrimary,
             ),
       ),
-      home: const MainGameScreen(),
+      home: const SplashScreen(),
     );
   }
 }
+

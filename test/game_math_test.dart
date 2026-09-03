@@ -5,6 +5,9 @@ import 'package:galacticgame/models/roulette_reward_model.dart';
 import 'package:galacticgame/models/store_item_model.dart';
 import 'package:galacticgame/models/mystery_card_model.dart';
 import 'package:galacticgame/models/sector_theme_model.dart';
+import 'package:galacticgame/models/cosmic_weather_model.dart';
+import 'package:galacticgame/models/boss_model.dart';
+import 'package:galacticgame/services/user_growth_service.dart';
 import 'package:galacticgame/services/sound_service.dart';
 import 'package:galacticgame/providers/game_economy_provider.dart';
 
@@ -15,8 +18,15 @@ import 'package:galacticgame/providers/game_economy_provider.dart';
 
 
 
+
+
 import 'package:galacticgame/services/storage_service.dart';
+import 'package:galacticgame/services/localized_pricing_service.dart';
+import 'package:galacticgame/services/razorpay_payment_service.dart';
 import 'package:galacticgame/utils/number_formatter.dart';
+
+
+
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -66,15 +76,16 @@ void main() {
       expect(costWithDiscount, closeTo(80.0, 0.01));
     });
 
-    test('Income payout formula scales with 2.1 factor', () {
+    test('Income payout formula scales with calibrated 1.85 factor', () {
       final ship1 = ShipModel.create(1);
       final ship2 = ShipModel.create(2);
       final ship3 = ShipModel.create(3);
 
-      expect(ship1.calculateIncomePayout(), 10.0);
-      expect(ship2.calculateIncomePayout(), 21.0);
-      expect(ship3.calculateIncomePayout(), closeTo(44.1, 0.01));
+      expect(ship1.calculateIncomePayout(), 4.0);
+      expect(ship2.calculateIncomePayout(), 4.0 * 1.85);
+      expect(ship3.calculateIncomePayout(), closeTo(4.0 * 1.85 * 1.85, 0.01));
     });
+
 
     test('Ship laser strike damage scales exponentially with ship tier', () {
       final ship1 = ShipModel.create(1);
@@ -462,8 +473,403 @@ void main() {
       await soundService.setHapticsEnabled(true);
       expect(soundService.isHapticsEnabled, true);
     });
+
+    test('Grid Auto-Sort: Rearranges cluttered ships ascending by tier with crates at the end', () {
+      final notifier = GameEconomyNotifier(GameState.initial());
+      final mixedSlots = List<ShipModel?>.filled(16, null);
+      mixedSlots[0] = ShipModel.create(5);
+      mixedSlots[1] = ShipModel.create(1, null, true); // crate
+      mixedSlots[2] = ShipModel.create(2);
+      mixedSlots[3] = ShipModel.create(1);
+      mixedSlots[4] = ShipModel.create(4);
+
+      notifier.state = notifier.state.copyWith(gridSlots: mixedSlots);
+      final sorted = notifier.sortGridSlots();
+      expect(sorted, true);
+
+      // Verify sorted order: T1 -> T2 -> T4 -> T5 -> Crate -> nulls
+      expect(notifier.state.gridSlots[0]!.tier, 1);
+      expect(notifier.state.gridSlots[0]!.isBox, false);
+      expect(notifier.state.gridSlots[1]!.tier, 2);
+      expect(notifier.state.gridSlots[2]!.tier, 4);
+      expect(notifier.state.gridSlots[3]!.tier, 5);
+      expect(notifier.state.gridSlots[4]!.isBox, true); // Crate moved to end
+      expect(notifier.state.gridSlots[5], isNull);
+    });
+
+    test('CosmicWeatherModel: Daily space weather modifiers cycle correctly', () {
+      final monday = CosmicWeatherModel.getTodaysWeather(DateTime(2026, 9, 7)); // Monday
+      expect(monday.weekday, DateTime.monday);
+      expect(monday.speedMultiplier, 1.5);
+
+      final wednesday = CosmicWeatherModel.getTodaysWeather(DateTime(2026, 9, 9)); // Wednesday
+      expect(wednesday.weekday, DateTime.wednesday);
+      expect(wednesday.bossDarkMatterMultiplier, 2.0);
+
+      final saturday = CosmicWeatherModel.getTodaysWeather(DateTime(2026, 9, 12)); // Saturday
+      expect(saturday.weekday, DateTime.saturday);
+      expect(saturday.incomeMultiplier, 1.5);
+    });
+
+    test('Nitro Overdrive: Charging, Activation, and Expiration', () {
+      final notifier = GameEconomyNotifier(GameState.initial());
+      expect(notifier.state.nitroCharge, 1.0); // Starts fully charged
+      expect(notifier.state.isNitroActive, false);
+
+      // Activate Nitro
+      final activated = notifier.activateNitroOverdrive();
+      expect(activated, true);
+      expect(notifier.state.isNitroActive, true);
+      expect(notifier.state.nitroSecondsRemaining, 12.0);
+
+      // Tick 5 seconds
+      notifier.tickNitro(5.0);
+      expect(notifier.state.isNitroActive, true);
+      expect(notifier.state.nitroSecondsRemaining, 7.0);
+
+      // Tick remaining 8 seconds to expire
+      notifier.tickNitro(8.0);
+      expect(notifier.state.isNitroActive, false);
+      expect(notifier.state.nitroSecondsRemaining, 0.0);
+
+      // Passive recharge
+      notifier.tickNitro(22.5); // Recharges half of 45s
+      expect((notifier.state.nitroCharge - 0.5).abs() < 0.05, true);
+    });
+
+    test('Prestige Mastery Perks: Starter ship tier and Dark Matter scaling', () {
+      final state0 = GameState.initial();
+      expect(state0.prestigeStarterShipTier, 1);
+      expect(state0.prestigeDarkMatterMultiplier, 1.0);
+
+      final stateP1 = state0.copyWith(
+        career: state0.career.copyWith(prestigeCount: 1),
+      );
+      expect(stateP1.prestigeStarterShipTier, 2);
+
+      final stateP5 = state0.copyWith(
+        career: state0.career.copyWith(prestigeCount: 5),
+      );
+      expect(stateP5.prestigeLuckyCloneBonus, 0.10);
+      expect(stateP5.prestigeBossDamageMultiplier, 1.50);
+      expect(stateP5.prestigeDarkMatterMultiplier, 2.0);
+    });
+
+    test('Remove Ads & VIP License: Purchase awards Dark Matter and spins, and restores correctly', () {
+
+      final notifier = GameEconomyNotifier(GameState.initial());
+      expect(notifier.state.hasRemovedAds, false);
+      final initialDm = notifier.state.darkMatter;
+      final initialSpins = notifier.state.extraSpinsCount;
+
+      // Purchase Remove Ads
+      notifier.purchaseRemoveAds();
+      expect(notifier.state.hasRemovedAds, true);
+      expect(notifier.state.darkMatter, initialDm + 500.0);
+      expect(notifier.state.extraSpinsCount, initialSpins + 5);
+
+      // Restore purchases
+      final restored = notifier.restorePurchases();
+      expect(restored, true);
+      expect(notifier.state.hasRemovedAds, true);
+    });
+
+    test('Localized Pricing Service: Returns non-empty price string and country code', () {
+      final price = LocalizedPricingService.removeAdsPriceString;
+      expect(price.isNotEmpty, true);
+      final country = LocalizedPricingService.userCountryCode;
+      expect(country.isNotEmpty, true);
+    });
+
+    test('User Growth Arc: Feature gating unlocks systems progressively by tier and lifetime credits', () {
+      // Tier 1: Fresh Cadet
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.autoMerge, highestTier: 1), false);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.codex, highestTier: 1), false);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.techTree, highestTier: 1), false);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.bossBeacon, highestTier: 1), false);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.relics, highestTier: 1), false);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.prestige, highestTier: 1), false);
+
+      // Tier 2: Auto-Merge & Sort
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.autoMerge, highestTier: 2), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.autoSort, highestTier: 2), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.codex, highestTier: 2), false);
+
+      // Tier 3: Codex & Daily Calendar
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.codex, highestTier: 3), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.dailyCalendar, highestTier: 3), true);
+
+      // Tier 4: Tech Tree & Roulette
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.techTree, highestTier: 4), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.roulette, highestTier: 4), true);
+
+      // Tier 5: Boss Beacon & Achievements
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.bossBeacon, highestTier: 5), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.achievements, highestTier: 5), true);
+
+      // Tier 6: Relics & Expeditions
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.relics, highestTier: 6), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.expeditions, highestTier: 6), true);
+
+      // Tier 7+: Prestige & Cosmic Store
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.prestige, highestTier: 7), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.cosmicStore, highestTier: 7), true);
+
+      // Prestige unlocked early if lifetime coins >= 500K
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.prestige, highestTier: 3, lifetimeCredits: 600000.0), true);
+    });
+
+    test('Cadet Tutorial Progression: Advances from Step 0 (Dispatch) -> Step 1 (Buy) -> Step 2 (Merge) -> Step 3 (Warp) -> Step 4 (Speed) -> Step 5 (Complete)', () {
+      final notifier = GameEconomyNotifier(GameState.initial().copyWith(credits: 500.0));
+      expect(notifier.state.tutorialStep, 0);
+
+      // 1. Dispatching ship to track or first line crossing advances to Step 1 (Buy Ship)
+      notifier.recordIncomeLineCrossing(ShipModel.create(1));
+      expect(notifier.state.tutorialStep, 1);
+
+      // 2. Purchasing a ship advances to Step 2 (Merge Ships)
+      notifier.purchaseShip();
+      expect(notifier.state.tutorialStep, 2);
+
+      // 3. Merging two Tier 1 ships advances to Step 3 (Tap to Warp)
+      notifier.state = notifier.state.copyWith(
+        gridSlots: [ShipModel.create(1), ShipModel.create(1), ...List.generate(14, (_) => null)],
+      );
+      notifier.handleGridMergeOrMove(0, 1);
+      expect(notifier.state.tutorialStep, 3);
+
+      // 4. Tapping the circuit for Warp Boost advances to Step 4 (Fleet Engine Speed)
+      notifier.tapRacetrackBoost();
+      expect(notifier.state.tutorialStep, 4);
+
+      // 5. Upgrading Fleet Speed completes the tutorial (Step 5) and awards bonus
+      notifier.upgradeFleetSpeed();
+      expect(notifier.state.tutorialStep, 5);
+    });
+
+    test('Circuit Engineering: Fleet Engine Speed upgrades scale cost and multiplier', () {
+      final notifier = GameEconomyNotifier(GameState.initial().copyWith(credits: 1000.0));
+      expect(notifier.state.fleetSpeedLevel, 1);
+      expect(notifier.state.fleetSpeedMultiplier, 1.0);
+      final initialCost = notifier.state.fleetSpeedUpgradeCost;
+      expect(initialCost, 250.0);
+
+      // Upgrade Speed Level 1 -> 2
+      final upgraded = notifier.upgradeFleetSpeed();
+      expect(upgraded, true);
+      expect(notifier.state.fleetSpeedLevel, 2);
+      expect(notifier.state.fleetSpeedMultiplier, 1.05); // +5%
+      expect(notifier.state.credits, 1000.0 - 250.0);
+      expect(notifier.state.fleetSpeedUpgradeCost > initialCost, true);
+    });
+
+    test('Circuit Engineering: Multi-Laser Finish Gates unlock up to 4 gates on the circuit', () {
+      final notifier = GameEconomyNotifier(GameState.initial().copyWith(credits: 600000.0));
+      expect(notifier.state.finishLinesCount, 1);
+      expect(notifier.state.nextFinishLineCost, 5000.0);
+
+      // Unlock Gate 2 (Dual-Gate Circuit)
+      expect(notifier.unlockNextFinishLine(), true);
+      expect(notifier.state.finishLinesCount, 2);
+      expect(notifier.state.nextFinishLineCost, 50000.0);
+
+      // Unlock Gate 3 (Tri-Gate Circuit)
+      expect(notifier.unlockNextFinishLine(), true);
+      expect(notifier.state.finishLinesCount, 3);
+      expect(notifier.state.nextFinishLineCost, 500000.0);
+
+      // Unlock Gate 4 (Quad-Gate Singularity Circuit)
+      expect(notifier.unlockNextFinishLine(), true);
+      expect(notifier.state.finishLinesCount, 4);
+      expect(notifier.state.nextFinishLineCost, null); // Maxed out!
+
+      // Cannot unlock beyond Gate 4
+      expect(notifier.unlockNextFinishLine(), false);
+    });
+
+    test('Circuit Ascension: Evolving Track morphs circuit tier, resets gates to 1, and multiplies income', () {
+      final notifier = GameEconomyNotifier(
+        GameState.initial().copyWith(
+          credits: 20000000.0, // 20M credits
+          finishLinesCount: 4, // Max gates unlocked on Tier 1
+          circuitTier: 1,
+        ),
+      );
+
+      expect(notifier.state.circuitTier, 1);
+      expect(notifier.state.circuitIncomeMultiplier, 1.0);
+      expect(notifier.state.trackEvolutionCost, 1500000.0);
+      expect(notifier.state.canEvolveTrack, true);
+
+      // Evolve to Track Tier 2 (Hyper-Elliptical Superhighway)
+      final evolved = notifier.evolveTrackCircuit();
+      expect(evolved, true);
+      expect(notifier.state.circuitTier, 2);
+      expect(notifier.state.circuitIncomeMultiplier, 1.5);
+      expect(notifier.state.finishLinesCount, 1); // Reset for new tier
+      expect(notifier.state.credits, 20000000.0 - 1500000.0);
+      expect(notifier.state.circuitTierName, 'Hyper-Elliptical Superhighway');
+      expect(notifier.state.trackEvolutionCost, 15000000.0); // 15M for Tier 3
+    });
+
+    test('Circuit Engineering: Hyper-Pads Boost upgrade scales impulse multiplier and cost', () {
+      final notifier = GameEconomyNotifier(GameState.initial().copyWith(credits: 5000.0));
+      expect(notifier.state.boostPadLevel, 1);
+      expect(notifier.state.boostPadMultiplier, 1.50);
+      expect(notifier.state.boostPadUpgradeCost, 1000.0);
+
+      // Upgrade to Level 2
+      final upgraded = notifier.upgradeBoostPad();
+      expect(upgraded, true);
+      expect(notifier.state.boostPadLevel, 2);
+      expect(notifier.state.boostPadMultiplier, 1.65);
+      expect(notifier.state.credits, 5000.0 - 1000.0);
+      expect(notifier.state.boostPadUpgradeCost, 1600.0);
+    });
+
+    test('Economy Calibration: Calibrated payout scales harmoniously with tier', () {
+      final shipT1 = ShipModel.create(1);
+      expect(shipT1.calculateIncomePayout(), 4.0);
+
+      final shipT2 = ShipModel.create(2);
+      expect(shipT2.calculateIncomePayout(), 4.0 * 1.85);
+
+      final shipT3 = ShipModel.create(3);
+      expect(shipT3.calculateIncomePayout(), 4.0 * 1.85 * 1.85);
+    });
+
+    test('User Growth System: 7 Commander Ranks map accurately across ship tiers', () {
+      expect(UserGrowthService.getCommanderRank(1).title, 'Novice Cadet');
+      expect(UserGrowthService.getCommanderRank(2).title, 'Flight Officer');
+      expect(UserGrowthService.getCommanderRank(3).title, 'Fleet Navigator');
+      expect(UserGrowthService.getCommanderRank(4).title, 'Quantum Engineer');
+      expect(UserGrowthService.getCommanderRank(5).title, 'Battle Commander');
+      expect(UserGrowthService.getCommanderRank(6).title, 'Starfleet Marshal');
+      expect(UserGrowthService.getCommanderRank(7).title, 'Galactic Overlord');
+      expect(UserGrowthService.getCommanderRank(15).title, 'Galactic Overlord');
+    });
+
+    test('User Growth System: Progressive feature unlock gating across all 7 stages', () {
+      // Tier 1: Speed upgrades unlocked, Auto-merge/gates/pads locked
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.fleetSpeedUpgrade, highestTier: 1), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.autoMerge, highestTier: 1), false);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.multiLaserGates, highestTier: 1), false);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.hyperPads, highestTier: 1), false);
+
+      // Tier 2: Auto-merge & Multi-laser gates unlocked
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.autoMerge, highestTier: 2), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.multiLaserGates, highestTier: 2), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.hyperPads, highestTier: 2), false);
+
+      // Tier 3: Hyper-Pads, Codex, Daily Calendar unlocked
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.hyperPads, highestTier: 3), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.codex, highestTier: 3), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.dailyCalendar, highestTier: 3), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.trackEvolution, highestTier: 3), false);
+
+      // Tier 4: Track Evolution, Tech Tree, Roulette unlocked
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.trackEvolution, highestTier: 4), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.techTree, highestTier: 4), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.roulette, highestTier: 4), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.bossBeacon, highestTier: 4), false);
+
+      // Tier 5: Boss Beacon & Achievements unlocked
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.bossBeacon, highestTier: 5), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.achievements, highestTier: 5), true);
+
+      // Tier 6: Relics & Expeditions unlocked
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.relics, highestTier: 6), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.expeditions, highestTier: 6), true);
+
+      // Tier 7: Prestige & Store unlocked
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.prestige, highestTier: 7), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.cosmicStore, highestTier: 7), true);
+    });
+
+    test('User Growth System: Learning Milestone Quests progression and rewards', () {
+      final notifier = GameEconomyNotifier(GameState.initial().copyWith(
+        highestTierUnlocked: 2,
+        credits: 0.0,
+        darkMatter: 0.0,
+      ));
+
+      final activeQuest = UserGrowthService.getActiveMilestone(notifier.state);
+      expect(activeQuest, isNotNull);
+      expect(activeQuest!.id, 1);
+      expect(activeQuest.checkCompleted(notifier.state), true);
+
+      // Claim Quest 1 reward
+      final claimed = notifier.claimLearningMilestone(1);
+      expect(claimed, true);
+      expect(notifier.state.claimedLearningMilestones, contains(1));
+      expect(notifier.state.credits, 500.0);
+      expect(notifier.state.darkMatter, 5.0);
+
+      // Next active milestone should be Quest 2
+      final nextQuest = UserGrowthService.getActiveMilestone(notifier.state);
+      expect(nextQuest?.id, 2);
+    });
+
+    test('Combat Mechanics: Boss Archetypes and Kinetic Shield absorption', () {
+      final boss = const BossModel(
+        id: 'test_shielded',
+        name: 'Shielded Titan Mk.1',
+        spriteAsset: 'assets/kenney_space-shooter-remastered/PNG/Enemies/enemyBlack3.png',
+        archetype: BossArchetype.shieldedTitan,
+        maxHealth: 500.0,
+        currentHealth: 500.0,
+        maxShieldHealth: 200.0,
+        currentShieldHealth: 200.0,
+        timeRemaining: 30.0,
+        bountyCredits: 10000.0,
+        bountyDarkMatter: 10.0,
+      );
+
+      expect(boss.hasShield, true);
+      expect(boss.shieldPercentage, 1.0);
+
+      // 1. Partial shield hit
+      final hit1 = boss.applyDamage(80.0);
+      expect(hit1.currentShieldHealth, 120.0);
+      expect(hit1.currentHealth, 500.0); // Hull unharmed
+
+      // 2. Shield break & breakthrough damage
+      final hit2 = hit1.applyDamage(150.0);
+      expect(hit2.currentShieldHealth, 0.0);
+      expect(hit2.hasShield, false);
+      expect(hit2.currentHealth, 500.0 - 30.0); // 30 dmg pierced into hull
+    });
+
+    test('Razorpay Payment Service: Test key configuration and checkout callback handling', () async {
+      final service = RazorpayPaymentService();
+      expect(RazorpayPaymentService.testKeyId, 'rzp_test_jX0oGdLK69tv2V');
+
+      String? recordedPaymentId;
+      service.startVipPassPayment(
+        onSuccess: (paymentId) {
+          recordedPaymentId = paymentId;
+        },
+        onFailure: (_) {},
+      );
+
+      // Wait for test fallback resolution
+      await Future.delayed(const Duration(milliseconds: 700));
+      expect(recordedPaymentId != null, true);
+      expect(recordedPaymentId!.contains('test'), true);
+      service.dispose();
+    });
   });
 }
+
+
+
+
+
+
+
+
+
+
 
 
 

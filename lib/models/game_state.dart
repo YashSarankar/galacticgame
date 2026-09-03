@@ -18,6 +18,9 @@ class GameState {
   final double feverCharge; // 0.0 to 1.0 (Tap Frenzy Meter)
   final bool isFeverActive; // Whether Hyperspace Fever Rush is active
   final double feverTimeRemaining; // Seconds remaining in active fever mode
+  final double nitroCharge; // 0.0 to 1.0 (Manual Warp Speed Meter)
+  final bool isNitroActive; // Whether Hyperspace Nitro Overdrive is active
+  final double nitroSecondsRemaining; // Seconds remaining in active nitro
   final int comboCount; // Merge combo chain counter (e.g. 2x, 3x, 4x)
   final int lastMergeTimestamp; // Milliseconds for chaining combos
   final String lastComboMessage; // e.g. "3X ULTRA COMBO!"
@@ -35,6 +38,9 @@ class GameState {
   final bool isDronePermanent; // VIP Drone lifetime AI license
   final int droneRentalExpiryEpoch; // Expiry timestamp for rented VIP Drone
   final List<String> unlockedPermanentBoosters; // e.g. ['perm_quantum_overdrive', 'perm_sublight_thrusters']
+  final bool hasRemovedAds; // Permanent Ad-Free VIP License
+  final int tutorialStep; // 0 = Drag to track, 1 = Buy second ship, 2 = Merge ships, 3 = Tap for Warp, 4 = Fleet Speed, 5 = Completed
+  final List<int> acknowledgedUnlockTiers; // Tiers whose unlock ceremony has been viewed
   final CareerModel career;
 
   const GameState({
@@ -48,6 +54,9 @@ class GameState {
     this.feverCharge = 0.0,
     this.isFeverActive = false,
     this.feverTimeRemaining = 0.0,
+    this.nitroCharge = 1.0,
+    this.isNitroActive = false,
+    this.nitroSecondsRemaining = 0.0,
     this.comboCount = 0,
     this.lastMergeTimestamp = 0,
     this.lastComboMessage = '',
@@ -65,9 +74,112 @@ class GameState {
     this.isDronePermanent = false,
     this.droneRentalExpiryEpoch = 0,
     this.unlockedPermanentBoosters = const [],
+    this.hasRemovedAds = false,
+    this.tutorialStep = 0,
+    this.acknowledgedUnlockTiers = const [1],
+    this.fleetSpeedLevel = 1,
+    this.finishLinesCount = 1,
+    this.circuitTier = 1,
+    this.boostPadLevel = 1,
+    this.claimedLearningMilestones = const [],
     required this.career,
   });
 
+  final int fleetSpeedLevel;
+  final int finishLinesCount;
+  final int circuitTier;
+  final int boostPadLevel;
+  final List<int> claimedLearningMilestones;
+
+
+  /// Velocity impulse multiplier applied when crossing an on-track Hyper Boost Pad (+15% per level)
+  double get boostPadMultiplier => 1.50 + (boostPadLevel - 1) * 0.15;
+
+  /// Cost in Credits to upgrade Hyper Boost Pads (Max Lv.10)
+  double get boostPadUpgradeCost =>
+      (1000.0 * pow(1.6, boostPadLevel - 1)).floorToDouble();
+
+  /// Permanent Income Multiplier from Track Circuit Evolution
+  double get circuitIncomeMultiplier {
+    switch (circuitTier) {
+      case 1:
+        return 1.0; // Orbital Loop
+      case 2:
+        return 1.5; // Hyper-Elliptical Superhighway
+      case 3:
+        return 2.5; // Infinity Singularity Ring (Figure-8)
+      case 4:
+        return 5.0; // Quantum Pulsar Tri-Loop
+      case 5:
+      default:
+        return 10.0; // Omega Cosmic Hyper-Loop
+    }
+  }
+
+
+  /// Cost in Credits to evolve to the next track circuit tier
+  double get trackEvolutionCost {
+    switch (circuitTier) {
+      case 1:
+        return 1500000.0; // 1.5M for Tier 2
+      case 2:
+        return 15000000.0; // 15M for Tier 3
+      case 3:
+        return 150000000.0; // 150M for Tier 4
+      case 4:
+        return 1500000000.0; // 1.5B for Tier 5
+      default:
+        return 15000000000.0;
+    }
+  }
+
+  /// Title name of current circuit tier
+  String get circuitTierName {
+    switch (circuitTier) {
+      case 1:
+        return 'Orbital Loop';
+      case 2:
+        return 'Hyper-Elliptical Superhighway';
+      case 3:
+        return 'Infinity Singularity Ring';
+      case 4:
+        return 'Quantum Pulsar Tri-Loop';
+      case 5:
+      default:
+        return 'Omega Cosmic Hyper-Loop';
+    }
+  }
+
+  bool get canEvolveTrack =>
+      finishLinesCount >= 4 && credits >= trackEvolutionCost;
+
+  /// Multiplier from Credit-purchased Fleet Engine Speed upgrades (+5% per level)
+  double get fleetSpeedMultiplier => 1.0 + (fleetSpeedLevel - 1) * 0.05;
+
+  /// Cost to upgrade Fleet Engine Speed to next level
+  double get fleetSpeedUpgradeCost =>
+      (250.0 * pow(1.18, fleetSpeedLevel - 1)).floorToDouble();
+
+  /// Cost to unlock the next multi-laser finish line (up to 4 gates)
+  double? get nextFinishLineCost {
+    switch (finishLinesCount) {
+      case 1:
+        return 5000.0; // Gate 2 (Dual-Gate Circuit)
+      case 2:
+        return 50000.0; // Gate 3 (Tri-Gate Circuit)
+      case 3:
+        return 500000.0; // Gate 4 (Quad-Gate Singularity Circuit)
+      default:
+        return null; // Max gates reached
+    }
+  }
+
+
+  /// Prestige Mastery Super Perks
+  int get prestigeStarterShipTier => career.prestigeCount >= 1 ? 2 : 1;
+  double get prestigeLuckyCloneBonus => career.prestigeCount >= 2 ? 0.10 : 0.0;
+  double get prestigeBossDamageMultiplier => career.prestigeCount >= 3 ? 1.50 : 1.0;
+  double get prestigeDarkMatterMultiplier => career.prestigeCount >= 5 ? 2.0 : 1.0;
 
   bool get canSpinFree {
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -121,6 +233,9 @@ class GameState {
       feverCharge: 0.0,
       isFeverActive: false,
       feverTimeRemaining: 0.0,
+      nitroCharge: 1.0,
+      isNitroActive: false,
+      nitroSecondsRemaining: 0.0,
       comboCount: 0,
       lastMergeTimestamp: 0,
       lastComboMessage: '',
@@ -132,6 +247,14 @@ class GameState {
       isDronePermanent: false,
       droneRentalExpiryEpoch: 0,
       unlockedPermanentBoosters: const [],
+      hasRemovedAds: false,
+      tutorialStep: 0,
+      acknowledgedUnlockTiers: const [1],
+      fleetSpeedLevel: 1,
+      finishLinesCount: 1,
+      circuitTier: 1,
+      boostPadLevel: 1,
+      claimedLearningMilestones: const [],
       gridSlots: slots,
       trackShips: [ShipModel.create(1)],
       relics: RelicModel.getInitialRelics(),
@@ -158,6 +281,9 @@ class GameState {
     double? feverCharge,
     bool? isFeverActive,
     double? feverTimeRemaining,
+    double? nitroCharge,
+    bool? isNitroActive,
+    double? nitroSecondsRemaining,
     int? comboCount,
     int? lastMergeTimestamp,
     String? lastComboMessage,
@@ -176,6 +302,14 @@ class GameState {
     bool? isDronePermanent,
     int? droneRentalExpiryEpoch,
     List<String>? unlockedPermanentBoosters,
+    bool? hasRemovedAds,
+    int? tutorialStep,
+    List<int>? acknowledgedUnlockTiers,
+    int? fleetSpeedLevel,
+    int? finishLinesCount,
+    int? circuitTier,
+    int? boostPadLevel,
+    List<int>? claimedLearningMilestones,
     CareerModel? career,
   }) {
     return GameState(
@@ -189,6 +323,10 @@ class GameState {
       feverCharge: feverCharge ?? this.feverCharge,
       isFeverActive: isFeverActive ?? this.isFeverActive,
       feverTimeRemaining: feverTimeRemaining ?? this.feverTimeRemaining,
+      nitroCharge: nitroCharge ?? this.nitroCharge,
+      isNitroActive: isNitroActive ?? this.isNitroActive,
+      nitroSecondsRemaining:
+          nitroSecondsRemaining ?? this.nitroSecondsRemaining,
       comboCount: comboCount ?? this.comboCount,
       lastMergeTimestamp: lastMergeTimestamp ?? this.lastMergeTimestamp,
       lastComboMessage: lastComboMessage ?? this.lastComboMessage,
@@ -209,6 +347,16 @@ class GameState {
           droneRentalExpiryEpoch ?? this.droneRentalExpiryEpoch,
       unlockedPermanentBoosters:
           unlockedPermanentBoosters ?? this.unlockedPermanentBoosters,
+      hasRemovedAds: hasRemovedAds ?? this.hasRemovedAds,
+      tutorialStep: tutorialStep ?? this.tutorialStep,
+      acknowledgedUnlockTiers:
+          acknowledgedUnlockTiers ?? this.acknowledgedUnlockTiers,
+      fleetSpeedLevel: fleetSpeedLevel ?? this.fleetSpeedLevel,
+      finishLinesCount: finishLinesCount ?? this.finishLinesCount,
+      circuitTier: circuitTier ?? this.circuitTier,
+      boostPadLevel: boostPadLevel ?? this.boostPadLevel,
+      claimedLearningMilestones:
+          claimedLearningMilestones ?? this.claimedLearningMilestones,
       career: career ?? this.career,
     );
   }
@@ -236,6 +384,14 @@ class GameState {
       'isDronePermanent': isDronePermanent,
       'droneRentalExpiryEpoch': droneRentalExpiryEpoch,
       'unlockedPermanentBoosters': unlockedPermanentBoosters,
+      'hasRemovedAds': hasRemovedAds,
+      'tutorialStep': tutorialStep,
+      'acknowledgedUnlockTiers': acknowledgedUnlockTiers,
+      'fleetSpeedLevel': fleetSpeedLevel,
+      'finishLinesCount': finishLinesCount,
+      'circuitTier': circuitTier,
+      'boostPadLevel': boostPadLevel,
+      'claimedLearningMilestones': claimedLearningMilestones,
       'career': career.toJson(),
     };
   }
@@ -264,6 +420,10 @@ class GameState {
       }).toList();
     }
 
+    final int highestTier = json['highestTierUnlocked'] as int? ?? 1;
+    // If existing save has already unlocked Tier 2+, mark tutorial as completed (step 5)
+    final int defaultTutorial = highestTier > 1 ? 5 : (json['tutorialStep'] as int? ?? 0);
+
     return GameState(
       credits: (json['credits'] as num?)?.toDouble() ?? 0.0,
       lifetimeCredits: (json['lifetimeCredits'] as num?)?.toDouble() ?? 0.0,
@@ -271,7 +431,7 @@ class GameState {
       totalShipsPurchased: json['totalShipsPurchased'] as int? ?? 0,
       totalMergesCount: json['totalMergesCount'] as int? ?? 0,
       totalLineCrossings: json['totalLineCrossings'] as int? ?? 0,
-      highestTierUnlocked: json['highestTierUnlocked'] as int? ?? 1,
+      highestTierUnlocked: highestTier,
       feverCharge: 0.0,
       isFeverActive: false,
       feverTimeRemaining: 0.0,
@@ -313,11 +473,29 @@ class GameState {
       unlockedPermanentBoosters: json['unlockedPermanentBoosters'] != null
           ? List<String>.from(json['unlockedPermanentBoosters'] as List)
           : const [],
+      hasRemovedAds: json['hasRemovedAds'] as bool? ?? false,
+      tutorialStep: defaultTutorial,
+      acknowledgedUnlockTiers: json['acknowledgedUnlockTiers'] != null
+          ? List<int>.from(json['acknowledgedUnlockTiers'] as List)
+          : [1],
+      fleetSpeedLevel: json['fleetSpeedLevel'] as int? ?? 1,
+      finishLinesCount: json['finishLinesCount'] as int? ?? 1,
+      circuitTier: json['circuitTier'] as int? ?? 1,
+      boostPadLevel: json['boostPadLevel'] as int? ?? 1,
+      claimedLearningMilestones: json['claimedLearningMilestones'] != null
+          ? List<int>.from(json['claimedLearningMilestones'] as List)
+          : const [],
       career: json['career'] != null
           ? CareerModel.fromJson(json['career'] as Map<String, dynamic>)
           : CareerModel.initial(),
     );
   }
+
+
+
+
+
+
 
 
 

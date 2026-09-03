@@ -16,5 +16,9 @@ void main() {
     );
 
     expect(find.byType(GalacticMergeApp), findsOneWidget);
+
+    // Advance splash screen loading timer
+    await tester.pump(const Duration(seconds: 3));
   });
 }
+

@@ -6,19 +6,28 @@ import 'package:flutter/material.dart';
 import '../models/ship_model.dart';
 import 'particle_effects.dart';
 
-/// Callback when a ship crosses the laser checkpoint
-typedef OnShipCrossLine = void Function(ShipModel ship, Vector2 position);
+/// Callback when a ship crosses a laser gate checkpoint
+typedef OnShipCrossGate = void Function(
+    ShipModel ship, Vector2 position, int gateIndex);
+
+/// Callback when a ship flies over an on-track Hyper Boost Pad
+typedef OnShipCrossBoostPad = void Function(
+    ShipModel ship, Vector2 position, int padIndex);
 
 /// Moving spacecraft component along a closed loop track metric.
 class MovingShipComponent extends PositionComponent {
   ShipModel ship;
   final ui.PathMetric pathMetric;
   final double trackTotalLength;
-  final double incomeLineOffset;
-  final OnShipCrossLine onCrossLine;
+  List<double> gateOffsets;
+  List<double> boostPadOffsets;
+  final OnShipCrossGate onCrossGate;
+  final OnShipCrossBoostPad? onCrossBoostPad;
 
   double currentDistance;
   double speedMultiplier = 1.0;
+  double boostPadMultiplier = 1.50;
+  double _boostTimer = 0.0;
   double _trailTimer = 0.0;
   double _penaltyTimer = 0.0;
   double _penaltyFactor = 1.0;
@@ -33,10 +42,22 @@ class MovingShipComponent extends PositionComponent {
     required this.ship,
     required this.pathMetric,
     required this.trackTotalLength,
-    required this.incomeLineOffset,
-    required this.onCrossLine,
+    required this.gateOffsets,
+    this.boostPadOffsets = const [],
+    required this.onCrossGate,
+    this.onCrossBoostPad,
     this.currentDistance = 0.0,
   }) : super(size: Vector2(36, 36), anchor: Anchor.center);
+
+  /// Updates active gate offsets dynamically (e.g. when buying new finish lines)
+  void updateGateOffsets(List<double> newOffsets) {
+    gateOffsets = List.from(newOffsets);
+  }
+
+  /// Updates active boost pad offsets dynamically (e.g. when evolving track)
+  void updateBoostPadOffsets(List<double> newOffsets) {
+    boostPadOffsets = List.from(newOffsets);
+  }
 
   /// Updates the ship tier in-place without removing from the Flame component tree
   void updateShipModel(ShipModel newShip) {
@@ -80,15 +101,16 @@ class MovingShipComponent extends PositionComponent {
       if (_cachedSprites.containsKey('fire00')) {
         _fireSprite = _cachedSprites['fire00'];
       } else {
-        final ui.Image fireImage = await Flame.images.load('assets/kenney_space-shooter-remastered/PNG/Effects/fire00.png');
+        final ui.Image fireImage = await Flame.images.load(
+            'assets/kenney_space-shooter-remastered/PNG/Effects/fire00.png');
         _fireSprite = Sprite(fireImage);
         _cachedSprites['fire00'] = _fireSprite!;
       }
     } catch (e) {
-      debugPrint('[MovingShipComponent] Error loading sprite ${ship.spriteAsset}: $e');
+      debugPrint(
+          '[MovingShipComponent] Error loading sprite ${ship.spriteAsset}: $e');
     }
   }
-
 
   @override
   void update(double dt) {
@@ -102,42 +124,84 @@ class MovingShipComponent extends PositionComponent {
       }
     }
 
-    final double effectiveSpeed = ship.baseSpeed * speedMultiplier * _penaltyFactor;
-    final double prevDist = currentDistance;
-    double newDist = currentDistance + (effectiveSpeed * dt);
+    if (_boostTimer > 0) {
+      _boostTimer -= dt;
+    }
 
-    bool crossed = false;
+    final double effectiveBoost = _boostTimer > 0 ? boostPadMultiplier : 1.0;
+    final double effectiveSpeed =
+        ship.baseSpeed * speedMultiplier * effectiveBoost * _penaltyFactor;
+    final double prevDist = currentDistance;
+    final double newDist = currentDistance + (effectiveSpeed * dt);
+
+    // 1. Check crossing for each active gate on the circuit
+    for (int i = 0; i < gateOffsets.length; i++) {
+      final double gateOffset = gateOffsets[i];
+      bool crossed = false;
+
+      if (newDist >= trackTotalLength) {
+        if (prevDist < gateOffset && newDist >= gateOffset) {
+          crossed = true;
+        } else if (prevDist < gateOffset &&
+            (newDist % trackTotalLength) >= gateOffset) {
+          crossed = true;
+        }
+      } else {
+        if (prevDist < gateOffset && newDist >= gateOffset) {
+          crossed = true;
+        }
+      }
+
+      if (crossed) {
+        final ui.Tangent? lineTangent =
+            pathMetric.getTangentForOffset(gateOffset);
+        final Vector2 gatePos = lineTangent != null
+            ? Vector2(lineTangent.position.dx, lineTangent.position.dy)
+            : position;
+        onCrossGate(ship, gatePos, i);
+      }
+    }
+
+    // 2. Check crossing for on-track Hyper Boost Pads
+    for (int i = 0; i < boostPadOffsets.length; i++) {
+      final double padOffset = boostPadOffsets[i];
+      bool crossedPad = false;
+
+      if (newDist >= trackTotalLength) {
+        if (prevDist < padOffset && newDist >= padOffset) {
+          crossedPad = true;
+        } else if (prevDist < padOffset &&
+            (newDist % trackTotalLength) >= padOffset) {
+          crossedPad = true;
+        }
+      } else {
+        if (prevDist < padOffset && newDist >= padOffset) {
+          crossedPad = true;
+        }
+      }
+
+      if (crossedPad) {
+        _boostTimer = 1.0; // 1.0 second hyper-thrust impulse
+        final ui.Tangent? padTangent =
+            pathMetric.getTangentForOffset(padOffset);
+        final Vector2 padPos = padTangent != null
+            ? Vector2(padTangent.position.dx, padTangent.position.dy)
+            : position;
+        onCrossBoostPad?.call(ship, padPos, i);
+      }
+    }
 
     if (newDist >= trackTotalLength) {
-      final double wrappedDist = newDist % trackTotalLength;
-      // Crossed before wrap or at wrap
-      if (prevDist < incomeLineOffset && (newDist >= incomeLineOffset)) {
-        crossed = true;
-      }
-      currentDistance = wrappedDist;
+      currentDistance = newDist % trackTotalLength;
     } else {
-      if (prevDist < incomeLineOffset && newDist >= incomeLineOffset) {
-        crossed = true;
-      }
       currentDistance = newDist;
     }
 
-    // Compute tangent and position along path FIRST
+    // Compute tangent and position along path
     final ui.Tangent? tangent = pathMetric.getTangentForOffset(currentDistance);
     if (tangent != null) {
       position = Vector2(tangent.position.dx, tangent.position.dy);
-      // Flame uses radians; tangent.angle points in direction of travel
-      // Kenney ships face UP by default, so we rotate by angle + pi/2
       angle = tangent.angle + (pi / 2);
-    }
-
-    // Trigger crossing callback precisely when passing the checkpoint
-    if (crossed) {
-      final ui.Tangent? lineTangent = pathMetric.getTangentForOffset(incomeLineOffset);
-      final Vector2 gatePos = lineTangent != null
-          ? Vector2(lineTangent.position.dx, lineTangent.position.dy)
-          : position;
-      onCrossLine(ship, gatePos);
     }
 
     // Update flame animation frame
@@ -147,63 +211,50 @@ class MovingShipComponent extends PositionComponent {
       _fireFrame = (_fireFrame + 1) % 4;
     }
 
-    // Spawn trailing cosmic engine sparks
+    // Spawn trailing cosmic engine sparks (boost streaks when hyper active!)
     _trailTimer += dt;
-    if (_trailTimer >= 0.12) {
+    final double trailInterval = _boostTimer > 0 ? 0.05 : 0.12;
+    if (_trailTimer >= trailInterval) {
       _trailTimer = 0.0;
       _spawnExhaustSparks();
     }
   }
 
-
   void _spawnExhaustSparks() {
     if (parent == null) return;
-    final double rearAngle = angle + (pi / 2);
-    final Vector2 rearOffset = Vector2(cos(rearAngle) * 16, sin(rearAngle) * 16);
-    final sparkPos = position + rearOffset;
-
-    final spark = SparkBurstComponent(
-      position: sparkPos,
-      baseColor: ship.glowColor,
-      count: 1,
-    );
-    parent!.add(spark);
+    final double backAngle = angle + (pi / 2);
+    final offset = Vector2(cos(backAngle), sin(backAngle)) * 14.0;
+    parent!.add(SparkBurstComponent(
+      position: position + offset,
+      baseColor: _boostTimer > 0 ? const Color(0xFF00F0FF) : ship.glowColor,
+      count: _boostTimer > 0 ? 6 : 3,
+    ));
   }
 
   @override
   void render(Canvas canvas) {
-    // Smooth layered glow without costly MaskFilter
-    final outerAuraPaint = Paint()
-      ..color = ship.glowColor.withAlpha((0.15 * 255).round());
-    canvas.drawCircle(Offset(size.x / 2, size.y / 2), size.x * 0.7, outerAuraPaint);
+    if (_boostTimer > 0) {
+      // Radiant supersonic speed trail glow behind ship
+      final glowPaint = Paint()
+        ..color = const Color(0xFF00F0FF).withAlpha((0.6 * 255).round())
+        ..maskFilter = const MaskFilter.blur(BlurStyle.solid, 8.0);
+      canvas.drawCircle(Offset.zero, 24.0, glowPaint);
+    }
 
-    final innerAuraPaint = Paint()
-      ..color = ship.glowColor.withAlpha((0.35 * 255).round());
-    canvas.drawCircle(Offset(size.x / 2, size.y / 2), size.x * 0.45, innerAuraPaint);
-
-    // Draw Animated Thruster Flame behind ship
     if (_fireSprite != null) {
       canvas.save();
-      canvas.translate(size.x / 2, size.y + 2);
-      final double flameScale = 0.6 + (_fireFrame * 0.1);
-      final flameSize = Vector2(10 * flameScale, 16 * flameScale);
-      _fireSprite!.render(
-        canvas,
-        position: Vector2(-flameSize.x / 2, 0),
-        size: flameSize,
-      );
+      canvas.translate(0, 16);
+      canvas.scale(_boostTimer > 0 ? 1.1 : 0.7, _boostTimer > 0 ? 1.3 : 0.7);
+      _fireSprite!.render(canvas, anchor: Anchor.topCenter);
       canvas.restore();
     }
 
-    // Render Main Ship Sprite
     if (_shipSprite != null) {
-      _shipSprite!.render(canvas, size: size);
-    } else {
-      final shipPaint = Paint()
-        ..color = ship.glowColor
-        ..style = PaintingStyle.fill;
-      canvas.drawCircle(Offset(size.x / 2, size.y / 2), 12, shipPaint);
+      _shipSprite!.render(
+        canvas,
+        size: size,
+        anchor: Anchor.center,
+      );
     }
   }
 }
-

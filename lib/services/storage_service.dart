@@ -96,9 +96,11 @@ class StorageService {
       ),
     );
 
-    final double maxOfflineHours = 2.0 + (offlineSkill.level * 2.0); // 2h up to 24h
+    final double baseOfflineHours = state.hasRemovedAds ? 12.0 : 2.0;
+    final double maxOfflineHours = baseOfflineHours + (offlineSkill.level * 2.0); // 12h base for VIP (up to 34h with skills)
     final int maxOfflineCapSeconds = (maxOfflineHours * 3600).round();
     final int cappedSeconds = min(elapsedSeconds, maxOfflineCapSeconds);
+
 
     // Calculate approximate earnings per second based on active track ships
     // Standard track loop length is ~1400 units

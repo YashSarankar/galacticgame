@@ -1,12 +1,23 @@
 import 'dart:math';
 
+/// Distinct alien dreadnought archetypes with unique combat behaviors
+enum BossArchetype {
+  juggernaut,
+  shieldedTitan,
+  swarmCarrier,
+  voidPhantom,
+}
+
 /// Representation of an active Alien Boss Incursion event.
 class BossModel {
   final String id;
   final String name;
   final String spriteAsset;
+  final BossArchetype archetype;
   final double maxHealth;
   final double currentHealth;
+  final double maxShieldHealth;
+  final double currentShieldHealth;
   final double timeRemaining;
   final double bountyCredits;
   final double bountyDarkMatter;
@@ -17,8 +28,11 @@ class BossModel {
     required this.id,
     required this.name,
     required this.spriteAsset,
+    this.archetype = BossArchetype.juggernaut,
     required this.maxHealth,
     required this.currentHealth,
+    this.maxShieldHealth = 0.0,
+    this.currentShieldHealth = 0.0,
     required this.timeRemaining,
     required this.bountyCredits,
     required this.bountyDarkMatter,
@@ -27,7 +41,33 @@ class BossModel {
   });
 
   bool get isDead => currentHealth <= 0.0;
+  bool get hasShield => currentShieldHealth > 0.0;
   double get healthPercentage => (currentHealth / maxHealth).clamp(0.0, 1.0);
+  double get shieldPercentage =>
+      maxShieldHealth > 0.0 ? (currentShieldHealth / maxShieldHealth).clamp(0.0, 1.0) : 0.0;
+
+  /// Applies damage through kinetic shield first, then passes remaining to hull
+  BossModel applyDamage(double damage) {
+    if (currentShieldHealth > 0.0) {
+      if (damage <= currentShieldHealth) {
+        return copyWith(currentShieldHealth: currentShieldHealth - damage);
+      } else {
+        final remaining = damage - currentShieldHealth;
+        final newHp = max(0.0, currentHealth - remaining);
+        return copyWith(
+          currentShieldHealth: 0.0,
+          currentHealth: newHp,
+          isDefeated: newHp <= 0.0,
+        );
+      }
+    }
+
+    final newHp = max(0.0, currentHealth - damage);
+    return copyWith(
+      currentHealth: newHp,
+      isDefeated: newHp <= 0.0,
+    );
+  }
 
   factory BossModel.createForSector({
     required int sectorLevel,
@@ -51,8 +91,19 @@ class BossModel {
         max(1, sectorLevel + ((highestTierUnlocked - 1) ~/ 2));
     final index = (effectiveLevel - 1) % bossSprites.length;
 
+    // Determine archetype based on level
+    final archetypes = [
+      BossArchetype.juggernaut,
+      BossArchetype.shieldedTitan,
+      BossArchetype.swarmCarrier,
+      BossArchetype.voidPhantom,
+    ];
+    final archetype = archetypes[(effectiveLevel - 1) % archetypes.length];
+
     // HP scales progressively with sector progression and spacecraft tier
     final double hp = 300.0 * pow(1.35, max(0, effectiveLevel - 1)).toDouble();
+    final double shieldHp =
+        archetype == BossArchetype.shieldedTitan ? (hp * 0.5) : 0.0;
     final double credits = max(5000.0, baseIncomePerLap * 50.0);
     final double dm = 5.0 + (effectiveLevel * 3.0);
 
@@ -60,21 +111,26 @@ class BossModel {
       id: 'boss_${DateTime.now().millisecondsSinceEpoch}',
       name: '${bossNames[index]} Mk.$effectiveLevel',
       spriteAsset: bossSprites[index],
+      archetype: archetype,
       maxHealth: hp,
       currentHealth: hp,
+      maxShieldHealth: shieldHp,
+      currentShieldHealth: shieldHp,
       timeRemaining: 30.0,
       bountyCredits: credits,
       bountyDarkMatter: dm,
     );
   }
 
-
   BossModel copyWith({
     String? id,
     String? name,
     String? spriteAsset,
+    BossArchetype? archetype,
     double? maxHealth,
     double? currentHealth,
+    double? maxShieldHealth,
+    double? currentShieldHealth,
     double? timeRemaining,
     double? bountyCredits,
     double? bountyDarkMatter,
@@ -85,8 +141,11 @@ class BossModel {
       id: id ?? this.id,
       name: name ?? this.name,
       spriteAsset: spriteAsset ?? this.spriteAsset,
+      archetype: archetype ?? this.archetype,
       maxHealth: maxHealth ?? this.maxHealth,
       currentHealth: currentHealth ?? this.currentHealth,
+      maxShieldHealth: maxShieldHealth ?? this.maxShieldHealth,
+      currentShieldHealth: currentShieldHealth ?? this.currentShieldHealth,
       timeRemaining: timeRemaining ?? this.timeRemaining,
       bountyCredits: bountyCredits ?? this.bountyCredits,
       bountyDarkMatter: bountyDarkMatter ?? this.bountyDarkMatter,
@@ -100,8 +159,11 @@ class BossModel {
       'id': id,
       'name': name,
       'spriteAsset': spriteAsset,
+      'archetype': archetype.name,
       'maxHealth': maxHealth,
       'currentHealth': currentHealth,
+      'maxShieldHealth': maxShieldHealth,
+      'currentShieldHealth': currentShieldHealth,
       'timeRemaining': timeRemaining,
       'bountyCredits': bountyCredits,
       'bountyDarkMatter': bountyDarkMatter,
@@ -111,12 +173,23 @@ class BossModel {
   }
 
   factory BossModel.fromJson(Map<String, dynamic> json) {
+    BossArchetype arch = BossArchetype.juggernaut;
+    if (json['archetype'] != null) {
+      arch = BossArchetype.values.firstWhere(
+        (a) => a.name == json['archetype'],
+        orElse: () => BossArchetype.juggernaut,
+      );
+    }
+
     return BossModel(
       id: json['id'] as String,
       name: json['name'] as String,
       spriteAsset: json['spriteAsset'] as String,
+      archetype: arch,
       maxHealth: (json['maxHealth'] as num).toDouble(),
       currentHealth: (json['currentHealth'] as num).toDouble(),
+      maxShieldHealth: (json['maxShieldHealth'] as num?)?.toDouble() ?? 0.0,
+      currentShieldHealth: (json['currentShieldHealth'] as num?)?.toDouble() ?? 0.0,
       timeRemaining: (json['timeRemaining'] as num).toDouble(),
       bountyCredits: (json['bountyCredits'] as num).toDouble(),
       bountyDarkMatter: (json['bountyDarkMatter'] as num).toDouble(),

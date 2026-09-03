@@ -101,15 +101,62 @@ class PrestigeModal extends StatelessWidget {
                     const Divider(color: GameTheme.cardBorder, height: 16),
                     _buildStatRow(
                       'Dark Matter Yield',
-                      NumberFormatter.formatDarkMatter(darkMatterYield),
+                      NumberFormatter.formatDarkMatter(darkMatterYield * state.prestigeDarkMatterMultiplier),
                       highlightColor: GameTheme.neonPurple,
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 14),
+
+              // Prestige Mastery Perks Roadmap
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: GameTheme.backgroundVoid,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: const Color(0xFFFFD700).withAlpha((0.3 * 255).round()),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.workspace_premium_rounded,
+                            color: Color(0xFFFFD700), size: 16),
+                        SizedBox(width: 6),
+                        Text(
+                          'PRESTIGE MASTERY PERKS',
+                          style: TextStyle(
+                            color: Color(0xFFFFD700),
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    _buildMasteryItem('P1: Starter Ship Tier 2',
+                        state.career.prestigeCount >= 1),
+                    const SizedBox(height: 4),
+                    _buildMasteryItem('P2: +10% Lucky Clone Chance',
+                        state.career.prestigeCount >= 2),
+                    const SizedBox(height: 4),
+                    _buildMasteryItem('P3: +50% Boss Laser Damage',
+                        state.career.prestigeCount >= 3),
+                    const SizedBox(height: 4),
+                    _buildMasteryItem('P5: 2X Permanent Dark Matter Yield',
+                        state.career.prestigeCount >= 5),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
 
               if (!canPrestige) ...[
+
                 const Text(
                   'Requires at least \$1.00M lifetime earnings to harvest Dark Matter.',
                   textAlign: TextAlign.center,
@@ -217,4 +264,29 @@ class PrestigeModal extends StatelessWidget {
       ],
     );
   }
+
+  Widget _buildMasteryItem(String title, bool isUnlocked) {
+
+    return Row(
+      children: [
+        Icon(
+          isUnlocked
+              ? Icons.check_circle_rounded
+              : Icons.lock_outline_rounded,
+          color: isUnlocked ? const Color(0xFF00FF88) : Colors.white30,
+          size: 13,
+        ),
+        const SizedBox(width: 6),
+        Text(
+          title,
+          style: TextStyle(
+            color: isUnlocked ? Colors.white : Colors.white38,
+            fontSize: 10,
+            fontWeight: isUnlocked ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ],
+    );
+  }
 }
+
