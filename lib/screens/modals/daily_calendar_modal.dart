@@ -548,7 +548,7 @@ class _DailyCalendarModalState extends ConsumerState<DailyCalendarModal>
               final success = notifier.claimDailyLoginReward();
               if (success) {
                 SoundService().playPurchaseSound();
-                Navigator.of(context).pop();
+                Navigator.of(context).pop(true);
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     backgroundColor: Color(0xFF0B2418),
@@ -593,7 +593,7 @@ class _DailyCalendarModalState extends ConsumerState<DailyCalendarModal>
                 final success = notifier.claimDailyLoginReward(multiplier: 2.0);
                 if (success) {
                   SoundService().playPurchaseSound();
-                  Navigator.of(context).pop();
+                  Navigator.of(context).pop(true);
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       backgroundColor: Color(0xFF131B3A),
@@ -617,7 +617,7 @@ class _DailyCalendarModalState extends ConsumerState<DailyCalendarModal>
                   if (success) {
                     SoundService().playPurchaseSound();
                     if (context.mounted) {
-                      Navigator.of(context).pop();
+                      Navigator.of(context).pop(true);
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           backgroundColor: Color(0xFF0B2418),

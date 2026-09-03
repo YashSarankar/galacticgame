@@ -133,11 +133,34 @@ class ShipModel {
   static const double baseCost = 100.0;
   static const double costScaleFactor = 1.25;
 
-  /// Calculates purchase cost for base ship: Cost = BaseCost * (1.25 ^ totalPurchases) * (1 - discount)
+  /// Calculates balanced, overflow-proof purchase cost for ships:
+  /// - Tier multiplier: pow(2.0, max(0, tier - 1))
+  /// - Base purchases: scales at 1.25 for first 15 purchases
+  /// - Soft-cap scaling: converts to smooth linear-log growth beyond 15 purchases to ensure
+  ///   gameplay remains balanced and cost NEVER overflows to double.infinity or NaN.
   static double calculatePurchaseCost(int totalPurchases, int tier, {double discount = 0.0}) {
-    final double tierMultiplier = pow(2.2, tier - 1).toDouble();
-    final double rawCost = baseCost * pow(costScaleFactor, totalPurchases) * tierMultiplier;
-    return max(10.0, rawCost * (1.0 - discount.clamp(0.0, 0.8)));
+    final int clampedTier = max(1, tier);
+    final double tierMultiplier = pow(2.0, clampedTier - 1).toDouble();
+
+    final int safePurchases = max(0, totalPurchases);
+    double purchaseScale;
+    if (safePurchases <= 15) {
+      purchaseScale = pow(costScaleFactor, safePurchases).toDouble();
+    } else {
+      // Smooth continuous transition from purchase 15 onwards
+      final double baseAt15 = pow(costScaleFactor, 15).toDouble(); // ~28.42
+      final double extra = (safePurchases - 15).toDouble();
+      purchaseScale = baseAt15 * (1.0 + (extra * 0.15) + (pow(extra, 1.2) * 0.05));
+    }
+
+    // Safety guard against IEEE-754 overflow
+    if (purchaseScale.isInfinite || purchaseScale.isNaN) {
+      purchaseScale = 1e12;
+    }
+
+    final double rawCost = baseCost * purchaseScale * tierMultiplier;
+    final double discountedCost = rawCost * (1.0 - discount.clamp(0.0, 0.8));
+    return max(10.0, discountedCost);
   }
 
 

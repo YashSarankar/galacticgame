@@ -18,7 +18,7 @@ import '../utils/game_theme.dart';
 import '../utils/number_formatter.dart';
 import 'modals/offline_earnings_modal.dart';
 import 'modals/discovery_modal.dart';
-import 'modals/comet_rush_modal.dart';
+
 import 'modals/daily_calendar_modal.dart';
 import 'modals/settings_modal.dart';
 import 'modals/membership_plans_modal.dart';
@@ -38,6 +38,7 @@ import 'modals/command_hub_modal.dart';
 
 import '../services/user_growth_service.dart';
 import '../services/localized_pricing_service.dart';
+import '../services/storage_service.dart';
 import '../services/sound_service.dart';
 
 import '../models/sector_theme_model.dart';
@@ -60,7 +61,7 @@ class MainGameScreen extends ConsumerStatefulWidget {
 }
 
 class _MainGameScreenState extends ConsumerState<MainGameScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   late final GalacticFlameGame _galacticGame;
   BannerAd? _bannerAd;
   bool _isBannerAdLoaded = false;
@@ -70,12 +71,7 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
   Timer? _feverTimer;
   Timer? _bossIncursionTimer;
 
-  // Live In-Game Event: Golden Comet
-  late final AnimationController _cometAnimController;
-  late final Animation<double> _cometAnimation;
-  bool _isCometVisible = false;
-  Timer? _cometSpawnTimer;
-  Timer? _initialCometTimer;
+
 
   // GlobalKeys for Guided Cadet Onboarding Overlay Targets
   final GlobalKey _trackGlobalKey = GlobalKey();
@@ -135,6 +131,7 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Coin Wallet Bouncy Scale Animation
     _coinBounceController = AnimationController(
       vsync: this,
@@ -211,41 +208,27 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
         Future.microtask(() {
           if (!mounted) return;
           ref.read(gameStateProvider.notifier).damageBoss(damage, isTap: isTap);
+
+          if (isTap) {
+            final trackBox =
+                _trackGlobalKey.currentContext?.findRenderObject() as RenderBox?;
+            if (trackBox != null && trackBox.hasSize) {
+              final trackCenter =
+                  trackBox.localToGlobal(trackBox.size.center(Offset.zero));
+              _vfxController.spawnFloatingText(
+                origin: trackCenter +
+                    Offset((Random().nextDouble() - 0.5) * 60,
+                        (Random().nextDouble() - 0.5) * 40),
+                text: '-${damage.toStringAsFixed(0)} 💥',
+                color: const Color(0xFFFF0055),
+              );
+            }
+          }
         });
       },
     );
 
-    // Setup Golden Comet Animation & Spawner
-    _cometAnimController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 5),
-    );
-    _cometAnimation = Tween<double>(begin: -80.0, end: 400.0).animate(
-      CurvedAnimation(parent: _cometAnimController, curve: Curves.linear),
-    );
-    _cometAnimController.addStatusListener((status) {
-      if (status == AnimationStatus.completed && mounted) {
-        setState(() => _isCometVisible = false);
-      }
-    });
 
-    _cometSpawnTimer = Timer.periodic(const Duration(seconds: 130), (_) {
-      final tutorialStep = ref.read(gameStateProvider).tutorialStep;
-      if (tutorialStep < 5) return;
-      if (mounted && !_isModalOpen && !_isCometVisible) {
-        setState(() => _isCometVisible = true);
-        _cometAnimController.forward(from: 0.0);
-      }
-    });
-    // First Comet streak after 50s
-    _initialCometTimer = Timer(const Duration(seconds: 50), () {
-      final tutorialStep = ref.read(gameStateProvider).tutorialStep;
-      if (tutorialStep < 5) return;
-      if (mounted && !_isModalOpen && !_isCometVisible) {
-        setState(() => _isCometVisible = true);
-        _cometAnimController.forward(from: 0.0);
-      }
-    });
 
     // Periodic Mystery Cosmic Cargo Crate Drops (Every 90 seconds)
     _cargoDropTimer = Timer.periodic(const Duration(seconds: 90), (_) {
@@ -361,52 +344,90 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
     _bannerAd?.load();
   }
 
-  void _onCometTapped(GameState gameState) {
-    _cometAnimController.stop();
-    setState(() => _isCometVisible = false);
 
-    const double approxTrackLength = 1400.0;
-    final double totalFleetPerSec = gameState.trackShips.fold<double>(
-      0.0,
-      (sum, s) =>
-          sum + (s.calculateIncomePayout() * (s.baseSpeed / approxTrackLength)),
-    );
-
-    _openGameModal((ctx) => CometRushModal(
-          fleetIncomePerLap: max(20.0, totalFleetPerSec),
-          onSessionComplete: ({
-            required int taps,
-            required double scoreMultiplier,
-            bool doubleWithAd = false,
-          }) {
-            ref.read(gameStateProvider.notifier).completeCometRushSession(
-                  taps: taps,
-                  scoreMultiplier: scoreMultiplier,
-                  doubleWithAd: doubleWithAd,
-                );
-          },
-        ));
-  }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _cargoDropTimer?.cancel();
     _feverTimer?.cancel();
     _bossIncursionTimer?.cancel();
-    _cometSpawnTimer?.cancel();
-    _initialCometTimer?.cancel();
-    _cometAnimController.dispose();
     _coinBounceController.dispose();
     _vfxController.dispose();
     _bannerAd?.dispose();
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
+      // Pause Flame engine loop, timers & sound to save battery
+      _galacticGame.pauseEngine();
+      SoundService().pauseBgm();
+      // Instantly persist current game state to local storage
+      final currentGameState = ref.read(gameStateProvider);
+      StorageService.saveGameState(currentGameState);
+    } else if (state == AppLifecycleState.resumed) {
+      // Resume engine & sound
+      _galacticGame.resumeEngine();
+      SoundService().resumeBgm();
+
+      // Trigger Offline Earnings Modal automatically on resume if away >= 60s
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted || _isModalOpen) return;
+        final currentGameState = ref.read(gameStateProvider);
+        if (currentGameState.tutorialStep < 5) return;
+
+        final offlineResult =
+            StorageService.calculateOfflineEarnings(currentGameState);
+        if (!mounted || _isModalOpen) return;
+
+        if (offlineResult.hasSignificantEarnings) {
+          await _openGameModal((ctx) => OfflineEarningsModal(
+                result: offlineResult,
+                onClaimRegular: () {
+                  ref
+                      .read(gameStateProvider.notifier)
+                      .claimOfflineEarnings(offlineResult.coinsEarned);
+                  _triggerRewardFlyingCoins(count: 10);
+                },
+                onClaimDoubled: () {
+                  ref.read(gameStateProvider.notifier).claimOfflineEarnings(
+                        offlineResult.coinsEarned,
+                        doubleReward: true,
+                      );
+                  _triggerRewardFlyingCoins(count: 14);
+                },
+              ));
+        }
+      });
+    }
+  }
 
 
-  Future<void> _openGameModal(WidgetBuilder builder) async {
+
+  void _triggerRewardFlyingCoins({
+    int count = 7,
+    bool isGem = false,
+    Color? color,
+  }) {
+    if (!mounted) return;
+    final size = MediaQuery.of(context).size;
+    final screenCenter = Offset(size.width / 2, size.height / 2);
+    _vfxController.spawnCoins(
+      origin: screenCenter,
+      targetKey: isGem ? _darkMatterCounterGlobalKey : _coinCounterGlobalKey,
+      count: count,
+      color:
+          color ?? (isGem ? const Color(0xFFBD00FF) : const Color(0xFFFFD700)),
+      isGem: isGem,
+      onTargetHit: _triggerCoinWalletBounce,
+    );
+  }
+
+  Future<T?> _openGameModal<T>(WidgetBuilder builder) async {
     _isModalOpen = true;
-    await showDialog(
+    final result = await showDialog<T>(
       context: context,
       builder: (ctx) => Material(
         type: MaterialType.transparency,
@@ -415,7 +436,11 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
     );
     if (mounted) {
       _isModalOpen = false;
+      if (result == true) {
+        _triggerRewardFlyingCoins(count: 8);
+      }
     }
+    return result;
   }
 
 
@@ -441,12 +466,14 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
                   ref
                       .read(gameStateProvider.notifier)
                       .claimOfflineEarnings(offlineResult.coinsEarned);
+                  _triggerRewardFlyingCoins(count: 10);
                 },
                 onClaimDoubled: () {
                   ref.read(gameStateProvider.notifier).claimOfflineEarnings(
                         offlineResult.coinsEarned,
                         doubleReward: true,
                       );
+                  _triggerRewardFlyingCoins(count: 14);
                 },
               ));
         } else if (gameState.canClaimDailyReward &&
@@ -904,43 +931,7 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
                         ),
                       ),
 
-                    // Live Animated Golden Comet Event
-                    if (_isCometVisible)
-                      AnimatedBuilder(
-                        animation: _cometAnimation,
-                        builder: (context, child) {
-                          return Positioned(
-                            left: _cometAnimation.value,
-                            top: 15.0 + (_cometAnimController.value * 70.0),
-                            child: GestureDetector(
-                              onTap: () => _onCometTapped(gameState),
-                              child: Transform.rotate(
-                                angle: 0.45,
-                                child: Container(
-                                  padding: const EdgeInsets.all(6),
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: const Color(0xFFFF0055)
-                                            .withAlpha((0.6 * 255).round()),
-                                        blurRadius: 20,
-                                        spreadRadius: 4,
-                                      ),
-                                    ],
-                                  ),
-                                  child: Image.asset(
-                                    'assets/kenney_space-shooter-remastered/PNG/Power-ups/powerupYellow_bolt.png',
-                                    width: 36,
-                                    height: 36,
-                                    fit: BoxFit.contain,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+
 
                     // Hyperspace Nitro Overdrive Activation Pill Button
                     Positioned(
@@ -2906,43 +2897,6 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
         },
       ),
     ),
-
-    if (state.lastComboMessage.isNotEmpty &&
-        (DateTime.now().millisecondsSinceEpoch - state.lastMergeTimestamp < 2500))
-      Positioned(
-        top: 8,
-        left: 0,
-        right: 0,
-        child: Center(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-            decoration: BoxDecoration(
-              color: Colors.black.withAlpha((0.88 * 255).round()),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: const Color(0xFFFFD700),
-                width: 1.5,
-              ),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0xFFFF0055),
-                  blurRadius: 12,
-                  spreadRadius: 1,
-                )
-              ],
-            ),
-            child: Text(
-              state.lastComboMessage,
-              style: const TextStyle(
-                color: Color(0xFFFFD700),
-                fontSize: 10.5,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 0.6,
-              ),
-            ),
-          ),
-        ),
-      ),
   ],
 );
 

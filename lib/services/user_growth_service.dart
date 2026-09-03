@@ -417,7 +417,7 @@ class UserGrowthService {
             'Claim your jackpot reward instantly, or watch a transmission to spin again!',
           ],
           proTip:
-              'Spinning during a Comet Rush or Warp event multiplies credit rewards based on your boosted earning rate!',
+              'Spinning during a Nitro Overdrive or Warp event multiplies credit rewards based on your boosted earning rate!',
         );
 
       case GameFeature.autoMerge:

@@ -592,38 +592,10 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
       final bool isNewDiscovery = newTier > state.highestTierUnlocked;
       final int newHighest = max(state.highestTierUnlocked, newTier);
 
-      final int now = DateTime.now().millisecondsSinceEpoch;
-      final bool isCombo = (now - state.lastMergeTimestamp) < 2500;
-      final int newComboCount = isCombo ? (state.comboCount + 1) : 1;
-
-      // Combo Credit Payout Bonus
-      double bonusCredits = 0.0;
-      String comboMessage = '';
-      if (newComboCount >= 2) {
-        final double comboMultiplier = 1.0 + (newComboCount * 0.5);
-        bonusCredits = mergedShip.calculateIncomePayout() * comboMultiplier * 3;
-        comboMessage = '$newComboCount' 'X MERGE COMBO!';
-      }
-
-      // 15% Chance on Combo >= 2 for Lucky Ship Duplication
-      bool luckyDuplicated = false;
-      if (newComboCount >= 2 && Random().nextDouble() < 0.18) {
-        // Find empty slot to spawn a free clone!
-        for (int i = 0; i < unlockedLimit; i++) {
-          if (newSlots[i] == null) {
-            newSlots[i] = ShipModel.create(newTier);
-            luckyDuplicated = true;
-            comboMessage = '$comboMessage ⚡ LUCKY CLONE!';
-            break;
-          }
-        }
-      }
-
       final updatedMissions = _evaluateMissions(
         state.career.missions,
         mergesIncrement: 1,
         unlockedTier: newTier,
-        coinsIncrement: bonusCredits,
       );
 
       final List<int> newAcknowledged =
@@ -639,16 +611,14 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
           state.tutorialStep == 3 ? 150.0 : 0.0;
 
       state = state.copyWith(
-        credits: state.credits + bonusCredits + tutorialMergeGrant,
-        lifetimeCredits:
-            state.lifetimeCredits + bonusCredits + tutorialMergeGrant,
+        credits: state.credits + tutorialMergeGrant,
+        lifetimeCredits: state.lifetimeCredits + tutorialMergeGrant,
         gridSlots: newSlots,
         trackShips: computeTrackFleet(newSlots),
         totalMergesCount: newMergeCount,
         highestTierUnlocked: newHighest,
-        comboCount: newComboCount,
-        lastMergeTimestamp: now,
-        lastComboMessage: comboMessage,
+        comboCount: 0,
+        lastComboMessage: '',
         tutorialStep: nextTutorial,
         acknowledgedUnlockTiers: newAcknowledged,
         career: state.career.copyWith(missions: updatedMissions),
@@ -662,17 +632,9 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
         }
       }
 
-
-      if (luckyDuplicated) {
-        _soundService.playPrestigeSound();
-      } else if (newComboCount >= 2) {
-        _soundService.playComboSound(newComboCount);
-      } else {
-        _soundService.playMergeSound();
-      }
+      _soundService.playMergeSound();
       _autoSaveDebounced();
       return true;
-
     } else {
       // Swap positions
       newSlots[fromIndex] = targetShip;
@@ -763,8 +725,8 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
         trackShips: computeTrackFleet(newSlots),
         totalMergesCount: state.totalMergesCount + totalMergesMade,
         highestTierUnlocked: newHighest,
-        comboCount: totalMergesMade,
-        lastComboMessage: '⚡ $totalMergesMade MERGES AUTO-COMPLETED!',
+        comboCount: 0,
+        lastComboMessage: '',
       );
 
       if (newHighest > prevHighest && newHighest > 1) {
@@ -893,14 +855,19 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     if (index == -1) return false;
 
     final mission = state.career.missions[index];
-    if (!mission.isCompleted || mission.isClaimed) return false;
-
     final updatedMission = mission.copyWith(isClaimed: true);
     final updatedMissions = List<MissionModel>.from(state.career.missions);
     updatedMissions[index] = updatedMission;
 
+    // Scale awarded coins dynamically with player's highest unlocked spacecraft tier
+    final double tierScale =
+        pow(1.5, max(0, state.highestTierUnlocked - 1)).toDouble();
+    final double awardedCredits =
+        mission.rewardCoins * tierScale * relicIncomeMultiplier;
+
     state = state.copyWith(
-      credits: state.credits + mission.rewardCoins,
+      credits: state.credits + awardedCredits,
+      lifetimeCredits: state.lifetimeCredits + awardedCredits,
       darkMatter: state.darkMatter + mission.rewardDarkMatter,
       career: state.career.copyWith(missions: updatedMissions),
     );
@@ -1410,9 +1377,12 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     final reward = DailyRewardDay.schedule[dayIndex];
     final double effectiveMultiplier =
         doubleWithAd ? 2.0 : (multiplier > 1.0 ? multiplier : 1.0);
+    // Scale daily credits dynamically with current fleet progression
+    final double tierMultiplier =
+        pow(1.6, max(0, state.highestTierUnlocked - 1)).toDouble();
 
     final double addedCredits =
-        reward.creditsReward * effectiveMultiplier * relicIncomeMultiplier;
+        reward.creditsReward * effectiveMultiplier * relicIncomeMultiplier * tierMultiplier;
     final double addedDarkMatter =
         reward.darkMatterReward * effectiveMultiplier;
     final int addedShards =
@@ -1654,53 +1624,6 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
         );
         break;
     }
-
-    _evaluateAchievements();
-    _soundService.playPrestigeSound();
-    _autoSaveDebounced();
-  }
-
-  /// Processes completion of a 10-second Comet Rush mini-game session
-  void completeCometRushSession({
-    required int taps,
-    required double scoreMultiplier,
-    bool doubleWithAd = false,
-  }) {
-    if (taps <= 0) return;
-
-    final double multiplier = doubleWithAd ? 2.0 : 1.0;
-
-    // Approximate active fleet income per lap
-    const double approxTrackLength = 1400.0;
-    final double totalFleetPerSec = state.trackShips.fold<double>(
-      0.0,
-      (sum, s) =>
-          sum +
-          (s.calculateIncomePayout() * (s.baseSpeed / approxTrackLength)),
-    );
-    final double effectivePerSec = max(20.0, totalFleetPerSec);
-
-    // Dynamic coin prize scaling with taps + score multiplier
-    final double coinPrize =
-        effectivePerSec * (15.0 + (taps * 1.5)) * scoreMultiplier * multiplier;
-
-    // Bonus Dark Matter for high-score performance
-    double bonusDm = 0.0;
-    if (taps >= 15) bonusDm += 3.0;
-    if (taps >= 30) bonusDm += 7.0;
-    if (taps >= 45) bonusDm += 15.0;
-    bonusDm *= multiplier;
-
-    // Bonus Lucky Wheel Spin for 25+ taps
-    int extraSpins = 0;
-    if (taps >= 25) extraSpins += (doubleWithAd ? 2 : 1);
-
-    state = state.copyWith(
-      credits: state.credits + coinPrize,
-      lifetimeCredits: state.lifetimeCredits + coinPrize,
-      darkMatter: state.darkMatter + bonusDm,
-      extraSpinsCount: state.extraSpinsCount + extraSpins,
-    );
 
     _evaluateAchievements();
     _soundService.playPrestigeSound();

@@ -72,23 +72,45 @@ class MissionModel {
   }
 
   factory MissionModel.fromJson(Map<String, dynamic> json) {
+    final String id = json['id'] as String? ?? '';
+    final canonicalList = getInitialMissions();
+    final canonical = canonicalList.firstWhere(
+      (m) => m.id == id,
+      orElse: () => const MissionModel(
+        id: '',
+        title: '',
+        description: '',
+        type: MissionType.mergeCount,
+        targetValue: 1,
+        currentProgress: 0.0,
+        rewardCoins: 100,
+        rewardDarkMatter: 1,
+      ),
+    );
+
     return MissionModel(
-      id: json['id'] as String,
-      title: json['title'] as String,
-      description: json['description'] as String,
+      id: id,
+      title: json['title'] as String? ?? canonical.title,
+      description: json['description'] as String? ?? canonical.description,
       type: MissionType.values.firstWhere(
         (e) => e.name == json['type'],
-        orElse: () => MissionType.mergeCount,
+        orElse: () => canonical.type,
       ),
-      targetValue: (json['targetValue'] as num).toDouble(),
-      currentProgress: (json['currentProgress'] as num).toDouble(),
-      rewardCoins: (json['rewardCoins'] as num).toDouble(),
-      rewardDarkMatter: (json['rewardDarkMatter'] as num).toDouble(),
+      targetValue:
+          (json['targetValue'] as num?)?.toDouble() ?? canonical.targetValue,
+      currentProgress:
+          (json['currentProgress'] as num?)?.toDouble() ?? 0.0,
+      rewardCoins: canonical.id.isNotEmpty
+          ? canonical.rewardCoins
+          : ((json['rewardCoins'] as num?)?.toDouble() ?? 100.0),
+      rewardDarkMatter: canonical.id.isNotEmpty
+          ? canonical.rewardDarkMatter
+          : ((json['rewardDarkMatter'] as num?)?.toDouble() ?? 1.0),
       isClaimed: json['isClaimed'] as bool? ?? false,
     );
   }
 
-  /// Initial starter missions catalog.
+  /// Initial starter missions catalog calibrated to player progression.
   static List<MissionModel> getInitialMissions() {
     return [
       const MissionModel(
@@ -98,7 +120,7 @@ class MissionModel {
         type: MissionType.mergeCount,
         targetValue: 3,
         currentProgress: 0,
-        rewardCoins: 500,
+        rewardCoins: 100,
         rewardDarkMatter: 1,
       ),
       const MissionModel(
@@ -108,7 +130,7 @@ class MissionModel {
         type: MissionType.crossCount,
         targetValue: 20,
         currentProgress: 0,
-        rewardCoins: 1200,
+        rewardCoins: 250,
         rewardDarkMatter: 2,
       ),
       const MissionModel(
@@ -118,8 +140,8 @@ class MissionModel {
         type: MissionType.unlockTier,
         targetValue: 3,
         currentProgress: 1,
-        rewardCoins: 3500,
-        rewardDarkMatter: 5,
+        rewardCoins: 600,
+        rewardDarkMatter: 3,
       ),
       const MissionModel(
         id: 'm4_buy_10',
@@ -128,7 +150,7 @@ class MissionModel {
         type: MissionType.buyShipCount,
         targetValue: 10,
         currentProgress: 0,
-        rewardCoins: 5000,
+        rewardCoins: 1200,
         rewardDarkMatter: 5,
       ),
       const MissionModel(
@@ -138,8 +160,8 @@ class MissionModel {
         type: MissionType.crossCount,
         targetValue: 100,
         currentProgress: 0,
-        rewardCoins: 15000,
-        rewardDarkMatter: 10,
+        rewardCoins: 3000,
+        rewardDarkMatter: 8,
       ),
       const MissionModel(
         id: 'm6_tier_5',
@@ -148,8 +170,8 @@ class MissionModel {
         type: MissionType.unlockTier,
         targetValue: 5,
         currentProgress: 1,
-        rewardCoins: 50000,
-        rewardDarkMatter: 20,
+        rewardCoins: 7500,
+        rewardDarkMatter: 15,
       ),
       const MissionModel(
         id: 'm7_merge_25',
@@ -158,8 +180,8 @@ class MissionModel {
         type: MissionType.mergeCount,
         targetValue: 25,
         currentProgress: 0,
-        rewardCoins: 100000,
-        rewardDarkMatter: 25,
+        rewardCoins: 15000,
+        rewardDarkMatter: 20,
       ),
     ];
   }

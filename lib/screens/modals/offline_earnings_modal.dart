@@ -139,7 +139,7 @@ class OfflineEarningsModal extends StatelessWidget {
                     onUserEarnedReward: () {
                       onClaimDoubled();
                       if (context.mounted) {
-                        Navigator.of(context).pop();
+                        Navigator.of(context).pop(true);
                       }
                     },
                   );
@@ -161,7 +161,7 @@ class OfflineEarningsModal extends StatelessWidget {
                 ),
                 onPressed: () {
                   onClaimRegular();
-                  Navigator.of(context).pop();
+                  Navigator.of(context).pop(true);
                 },
                 child: const Text(
                   'Claim Regular Amount',

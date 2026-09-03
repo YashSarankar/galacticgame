@@ -7,6 +7,7 @@ import 'package:galacticgame/models/mystery_card_model.dart';
 import 'package:galacticgame/models/sector_theme_model.dart';
 import 'package:galacticgame/models/cosmic_weather_model.dart';
 import 'package:galacticgame/models/boss_model.dart';
+import 'package:galacticgame/models/mission_model.dart';
 import 'package:galacticgame/services/user_growth_service.dart';
 import 'package:galacticgame/services/sound_service.dart';
 import 'package:galacticgame/providers/game_economy_provider.dart';
@@ -74,6 +75,12 @@ void main() {
       // Test discount
       final costWithDiscount = ShipModel.calculatePurchaseCost(0, 1, discount: 0.2);
       expect(costWithDiscount, closeTo(80.0, 0.01));
+
+      // Test extreme long-term purchases (never overflows to Infinity or NaN)
+      final cost1000 = ShipModel.calculatePurchaseCost(1000, 50);
+      expect(cost1000.isFinite, true);
+      expect(cost1000.isNaN, false);
+      expect(cost1000 > 0, true);
     });
 
     test('Income payout formula scales with calibrated 1.85 factor', () {
@@ -509,7 +516,7 @@ void main() {
       expect(secondClaim, false);
     });
 
-    test('Live Events: Golden UFO 3-Card Mystery Pick and Comet Rush mini-game session payouts', () {
+    test('Live Events: Golden UFO 3-Card Mystery Pick payouts', () {
       final notifier = GameEconomyNotifier(GameState.initial().copyWith(credits: 500.0));
 
       // 1. UFO Card Pick: Generate 3 cards & apply coin card
@@ -532,7 +539,6 @@ void main() {
       notifier.applyMysteryCardReward(coinCard);
       expect(notifier.state.credits, prevCredits + 1000.0);
 
-
       // 2. UFO Card Pick: Dark Matter with 2X Double Claim (Ad)
       final dmCard = const MysteryCardReward(
         type: MysteryRewardType.darkMatterGems,
@@ -545,17 +551,6 @@ void main() {
       final prevDm = notifier.state.darkMatter;
       notifier.applyMysteryCardReward(dmCard, doubleWithAd: true);
       expect(notifier.state.darkMatter, prevDm + 20.0); // Doubled from 10 to 20!
-
-      // 3. Comet Rush Session Completion: 30 Taps + High Score
-      final preCometCredits = notifier.state.credits;
-      final preCometSpins = notifier.state.extraSpinsCount;
-      notifier.completeCometRushSession(
-        taps: 30,
-        scoreMultiplier: 2.5,
-        doubleWithAd: true,
-      );
-      expect(notifier.state.credits > preCometCredits, true);
-      expect(notifier.state.extraSpinsCount > preCometSpins, true); // Earned bonus wheel spin!
     });
 
     test('SectorThemeModel: Dynamic theme progression across planetary sectors', () {
@@ -1068,6 +1063,57 @@ void main() {
       expect(notifier.state.gridSlots[2]!.tier, 2);
       expect(notifier.state.gridSlots[3]!.tier, 2);
       expect(notifier.state.gridSlots[4]!.tier, 3);
+    });
+
+    test('Sector Directives: Canonical normalization on load and dynamic tier scaling on claim', () {
+      // 1. Saved JSON with outdated 15000 / 50000 rewards automatically normalizes to canonical base values
+      final legacyJson = {
+        'id': 'm1_merge_3',
+        'title': 'Fleet Assembly',
+        'description': 'Merge ships 3 times on the grid',
+        'type': 'mergeCount',
+        'targetValue': 3,
+        'currentProgress': 3,
+        'rewardCoins': 15000, // Legacy outdated value
+        'rewardDarkMatter': 1,
+        'isClaimed': false,
+      };
+
+      final normalized = MissionModel.fromJson(legacyJson);
+      expect(normalized.rewardCoins, 100.0); // Calibrated to 100!
+      expect(normalized.isCompleted, true);
+
+      // 2. Dynamic Claim Scaling at Tier 1 vs Tier 5
+      final stateT1 = GameState.initial().copyWith(
+        highestTierUnlocked: 1,
+        career: GameState.initial().career.copyWith(missions: [normalized]),
+      );
+      final notifierT1 = GameEconomyNotifier(stateT1);
+      notifierT1.claimMission('m1_merge_3');
+      expect(notifierT1.state.credits, 100.0);
+
+      final stateT5 = GameState.initial().copyWith(
+        highestTierUnlocked: 5,
+        career: GameState.initial().career.copyWith(missions: [normalized]),
+      );
+      final notifierT5 = GameEconomyNotifier(stateT5);
+      notifierT5.claimMission('m1_merge_3');
+      // Scaled by 1.5^4 = 5.0625 -> 506.25 coins
+      expect(notifierT5.state.credits > 500.0, true);
+    });
+
+    test('Daily Commander Calendar: Dynamic progression tier scaling', () {
+      // Tier 1: Day 1 base 150 coins
+      final stateT1 = GameState.initial().copyWith(highestTierUnlocked: 1);
+      final notifierT1 = GameEconomyNotifier(stateT1);
+      notifierT1.claimDailyLoginReward();
+      expect(notifierT1.state.credits, 150.0);
+
+      // Tier 6: Day 1 scaled by 1.6^5 = 10.48576 -> 1572.86 coins
+      final stateT6 = GameState.initial().copyWith(highestTierUnlocked: 6);
+      final notifierT6 = GameEconomyNotifier(stateT6);
+      notifierT6.claimDailyLoginReward();
+      expect(notifierT6.state.credits > 1500.0, true);
     });
   });
 }

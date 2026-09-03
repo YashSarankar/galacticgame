@@ -274,9 +274,9 @@ class GameState {
     slots[0] = ShipModel.create(1);
 
     return GameState(
-      credits: 0.0,
-      lifetimeCredits: 0.0,
-      darkMatter: 0.0,
+      credits: 999999999999.0, // Infinite testing funds
+      lifetimeCredits: 999999999999.0,
+      darkMatter: 999999.0, // Infinite testing Dark Matter
       totalShipsPurchased: 0,
       totalMergesCount: 0,
       totalLineCrossings: 0,

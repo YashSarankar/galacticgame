@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/game_providers.dart';
@@ -122,24 +123,37 @@ class MissionsModal extends ConsumerWidget {
                   final bool isDone = mission.isCompleted;
                   final bool isClaimed = mission.isClaimed;
 
+                  final double tierScale =
+                      pow(1.5, max(0, gameState.highestTierUnlocked - 1))
+                          .toDouble();
+                  final double dynamicReward = (mission.rewardCoins *
+                          tierScale *
+                          ref.read(gameStateProvider.notifier).relicIncomeMultiplier)
+                      .floorToDouble();
+
                   return AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: isClaimed
-                          ? GameTheme.backgroundVoid.withAlpha((0.6 * 255).round())
+                          ? GameTheme.backgroundVoid
+                              .withAlpha((0.6 * 255).round())
                           : GameTheme.cardSurface,
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
                         color: isClaimed
-                            ? GameTheme.cardBorder.withAlpha((0.4 * 255).round())
-                            : (isDone ? GameTheme.neonGreen : GameTheme.cardBorder),
+                            ? GameTheme.cardBorder
+                                .withAlpha((0.4 * 255).round())
+                            : (isDone
+                                ? GameTheme.neonGreen
+                                : GameTheme.cardBorder),
                         width: (isDone && !isClaimed) ? 1.5 : 1.0,
                       ),
                       boxShadow: (isDone && !isClaimed)
                           ? [
                               BoxShadow(
-                                color: GameTheme.neonGreen.withAlpha((0.2 * 255).round()),
+                                color: GameTheme.neonGreen
+                                    .withAlpha((0.2 * 255).round()),
                                 blurRadius: 8,
                               )
                             ]
@@ -170,7 +184,7 @@ class MissionsModal extends ConsumerWidget {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              '+${NumberFormatter.formatCredits(mission.rewardCoins)} / +${NumberFormatter.formatDarkMatter(mission.rewardDarkMatter)}',
+                              '+${NumberFormatter.formatCredits(dynamicReward)} / +${NumberFormatter.formatDarkMatter(mission.rewardDarkMatter)}',
                               style: TextStyle(
                                 color: isClaimed
                                     ? GameTheme.textMuted
