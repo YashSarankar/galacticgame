@@ -250,14 +250,23 @@ class RemoveAdsModal extends ConsumerWidget {
                 children: [
                   TextButton(
                     onPressed: () {
-                      ref.read(gameStateProvider.notifier).restorePurchases();
+                      final bool success = ref
+                          .read(gameStateProvider.notifier)
+                          .restorePurchases();
                       Navigator.of(context).pop();
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          backgroundColor: Color(0xFF131B3A),
+                        SnackBar(
+                          backgroundColor: const Color(0xFF131B3A),
                           content: Text(
-                            '✅ Purchases Restored Successfully!',
-                            style: TextStyle(color: Color(0xFF00FF88)),
+                            success
+                                ? '✅ Purchases Restored Successfully!'
+                                : 'ℹ️ No previous purchases found on this account.',
+                            style: TextStyle(
+                              color: success
+                                  ? const Color(0xFF00FF88)
+                                  : const Color(0xFFFFB800),
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       );

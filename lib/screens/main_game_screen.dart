@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 
@@ -17,14 +18,21 @@ import '../utils/game_theme.dart';
 import '../utils/number_formatter.dart';
 import 'modals/offline_earnings_modal.dart';
 import 'modals/discovery_modal.dart';
-import 'modals/mystery_card_modal.dart';
 import 'modals/comet_rush_modal.dart';
 import 'modals/daily_calendar_modal.dart';
 import 'modals/settings_modal.dart';
 import 'modals/membership_plans_modal.dart';
 import 'modals/feature_unlocked_modal.dart';
 import 'modals/track_ascension_modal.dart';
+import 'modals/fleet_codex_modal.dart';
+import 'modals/skill_tree_modal.dart';
+import 'modals/wormhole_roulette_modal.dart';
+import 'modals/achievements_modal.dart';
+import 'modals/relics_modal.dart';
+import 'modals/expeditions_modal.dart';
+import 'modals/cosmic_store_modal.dart';
 import 'widgets/tutorial_guide_overlay.dart';
+import 'widgets/idle_vfx_overlay.dart';
 import 'modals/command_hub_modal.dart';
 
 
@@ -33,11 +41,6 @@ import '../services/localized_pricing_service.dart';
 import '../services/sound_service.dart';
 
 import '../models/sector_theme_model.dart';
-
-
-
-
-import '../models/cosmic_weather_model.dart';
 
 class MainGameScreen extends ConsumerStatefulWidget {
 
@@ -67,13 +70,6 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
   Timer? _feverTimer;
   Timer? _bossIncursionTimer;
 
-  // Live In-Game Event: Golden UFO
-  late final AnimationController _ufoAnimController;
-  late final Animation<double> _ufoAnimation;
-  bool _isUfoVisible = false;
-  Timer? _ufoSpawnTimer;
-  Timer? _initialUfoTimer;
-
   // Live In-Game Event: Golden Comet
   late final AnimationController _cometAnimController;
   late final Animation<double> _cometAnimation;
@@ -87,6 +83,20 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
   final GlobalKey _slot1GlobalKey = GlobalKey();
   final GlobalKey _buyShipGlobalKey = GlobalKey();
   final GlobalKey _fleetSpeedGlobalKey = GlobalKey();
+  final GlobalKey _sortButtonGlobalKey = GlobalKey();
+
+  // Currency Wallet Targets & Idle VFX Controller
+  final GlobalKey _coinCounterGlobalKey = GlobalKey();
+  final GlobalKey _darkMatterCounterGlobalKey = GlobalKey();
+  late final AnimationController _coinBounceController;
+  late final Animation<double> _coinBounceAnimation;
+  final IdleVfxController _vfxController = IdleVfxController();
+
+  void _triggerCoinWalletBounce() {
+    if (!mounted) return;
+    _coinBounceController.forward(from: 0.0);
+    HapticFeedback.selectionClick();
+  }
 
   // Dynamic Matching Merge Target Tracking
   int? _draggingShipTier;
@@ -97,13 +107,26 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
       case 0:
         return _slot0GlobalKey;
       case 1:
-        return _buyShipGlobalKey;
-      case 2:
-        return _slot1GlobalKey;
-      case 3:
         return _trackGlobalKey;
+      case 2:
+        return _buyShipGlobalKey;
+      case 3:
+        return _slot0GlobalKey;
       case 4:
         return _fleetSpeedGlobalKey;
+      case 10:
+        return _sortButtonGlobalKey;
+      default:
+        return null;
+    }
+  }
+
+  GlobalKey? _getTutorialDestinationKey(int step) {
+    switch (step) {
+      case 0:
+        return _trackGlobalKey;
+      case 3:
+        return _slot1GlobalKey;
       default:
         return null;
     }
@@ -112,6 +135,24 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
   @override
   void initState() {
     super.initState();
+    // Coin Wallet Bouncy Scale Animation
+    _coinBounceController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 180),
+    );
+    _coinBounceAnimation = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(begin: 1.0, end: 1.20)
+            .chain(CurveTween(curve: Curves.easeOutQuad)),
+        weight: 35,
+      ),
+      TweenSequenceItem(
+        tween: Tween(begin: 1.20, end: 1.0)
+            .chain(CurveTween(curve: Curves.elasticOut)),
+        weight: 65,
+      ),
+    ]).animate(_coinBounceController);
+
     _galacticGame = GalacticFlameGame(
 
       onIncomeEarned: (ship) {
@@ -131,6 +172,33 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
                 isDarkMatter: isDM,
                 rewardCredits: reward,
               );
+
+          final trackBox =
+              _trackGlobalKey.currentContext?.findRenderObject() as RenderBox?;
+          if (trackBox != null && trackBox.hasSize) {
+            final trackCenter =
+                trackBox.localToGlobal(trackBox.size.center(Offset.zero));
+            _vfxController.spawnCoins(
+              origin: trackCenter,
+              targetKey:
+                  isDM ? _darkMatterCounterGlobalKey : _coinCounterGlobalKey,
+              count: isDM ? 6 : 5,
+              color: isDM
+                  ? const Color(0xFFBD00FF)
+                  : const Color(0xFFFFD700),
+              isGem: isDM,
+              onTargetHit: _triggerCoinWalletBounce,
+            );
+            _vfxController.spawnFloatingText(
+              origin: trackCenter,
+              text: isDM
+                  ? '+10 DM! 💎'
+                  : '+${NumberFormatter.formatCredits(reward)}! 💰',
+              color: isDM
+                  ? const Color(0xFFBD00FF)
+                  : const Color(0xFFFFD700),
+            );
+          }
         });
       },
       onCanvasTapped: () {
@@ -147,34 +215,6 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
       },
     );
 
-    // Setup Golden UFO Animation & Spawner
-    _ufoAnimController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 9),
-    );
-    _ufoAnimation = Tween<double>(begin: -70.0, end: 380.0).animate(
-      CurvedAnimation(parent: _ufoAnimController, curve: Curves.easeInOut),
-    );
-    _ufoAnimController.addStatusListener((status) {
-      if (status == AnimationStatus.completed && mounted) {
-        setState(() => _isUfoVisible = false);
-      }
-    });
-
-    _ufoSpawnTimer = Timer.periodic(const Duration(seconds: 80), (_) {
-      if (mounted && !_isModalOpen && !_isUfoVisible) {
-        setState(() => _isUfoVisible = true);
-        _ufoAnimController.forward(from: 0.0);
-      }
-    });
-    // First UFO fly-by after 25s
-    _initialUfoTimer = Timer(const Duration(seconds: 25), () {
-      if (mounted && !_isModalOpen && !_isUfoVisible) {
-        setState(() => _isUfoVisible = true);
-        _ufoAnimController.forward(from: 0.0);
-      }
-    });
-
     // Setup Golden Comet Animation & Spawner
     _cometAnimController = AnimationController(
       vsync: this,
@@ -190,6 +230,8 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
     });
 
     _cometSpawnTimer = Timer.periodic(const Duration(seconds: 130), (_) {
+      final tutorialStep = ref.read(gameStateProvider).tutorialStep;
+      if (tutorialStep < 5) return;
       if (mounted && !_isModalOpen && !_isCometVisible) {
         setState(() => _isCometVisible = true);
         _cometAnimController.forward(from: 0.0);
@@ -197,6 +239,8 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
     });
     // First Comet streak after 50s
     _initialCometTimer = Timer(const Duration(seconds: 50), () {
+      final tutorialStep = ref.read(gameStateProvider).tutorialStep;
+      if (tutorialStep < 5) return;
       if (mounted && !_isModalOpen && !_isCometVisible) {
         setState(() => _isCometVisible = true);
         _cometAnimController.forward(from: 0.0);
@@ -205,16 +249,17 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
 
     // Periodic Mystery Cosmic Cargo Crate Drops (Every 90 seconds)
     _cargoDropTimer = Timer.periodic(const Duration(seconds: 90), (_) {
+      final tutorialStep = ref.read(gameStateProvider).tutorialStep;
+      if (tutorialStep < 5) return;
       if (mounted && !_isModalOpen) {
         ref.read(gameStateProvider.notifier).dropMysteryCargo();
       }
     });
 
-    // Real-time Fever, Boss, and VIP Drone Auto-Collector ticker (100ms interval)
+    // Real-time Boss, Nitro, and VIP Drone Auto-Collector ticker (100ms interval)
     int tickCount = 0;
     _feverTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
       if (mounted && !_isModalOpen) {
-        ref.read(gameStateProvider.notifier).tickFever(0.1);
         ref.read(gameStateProvider.notifier).tickBoss(0.1);
         ref.read(gameStateProvider.notifier).tickNitro(0.1);
 
@@ -229,6 +274,8 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
     // Periodic Alien Boss Incursion (Every 2 minutes 30 seconds)
     _bossIncursionTimer =
         Timer.periodic(const Duration(minutes: 2, seconds: 30), (_) {
+      final tutorialStep = ref.read(gameStateProvider).tutorialStep;
+      if (tutorialStep < 5) return;
       if (mounted && !_isModalOpen) {
         ref.read(gameStateProvider.notifier).spawnAlienBoss();
       }
@@ -252,6 +299,45 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
             _openGameModal((ctx) => FeatureUnlockedModal(
                   features: features,
                   tierUnlocked: tier,
+                  onLaunchFeature: (feat) {
+                    Future.delayed(const Duration(milliseconds: 200), () {
+                      if (!mounted) return;
+                      switch (feat.feature) {
+                        case GameFeature.codex:
+                          _openGameModal((c) => const FleetCodexModal());
+                          break;
+                        case GameFeature.techTree:
+                          _openGameModal((c) => const SkillTreeModal());
+                          break;
+                        case GameFeature.roulette:
+                          _openGameModal((c) => const WormholeRouletteModal());
+                          break;
+                        case GameFeature.dailyCalendar:
+                          _openGameModal((c) => const DailyCalendarModal());
+                          break;
+                        case GameFeature.achievements:
+                          _openGameModal((c) => const AchievementsModal());
+                          break;
+                        case GameFeature.relics:
+                          _openGameModal((c) => const RelicsModal());
+                          break;
+                        case GameFeature.expeditions:
+                          _openGameModal((c) => const ExpeditionsModal());
+                          break;
+                        case GameFeature.cosmicStore:
+                          _openGameModal((c) => const CosmicStoreModal());
+                          break;
+                        case GameFeature.autoMerge:
+                          ref.read(gameStateProvider.notifier).autoMergeGrid();
+                          break;
+                        case GameFeature.autoSort:
+                          ref.read(gameStateProvider.notifier).sortGridSlots();
+                          break;
+                        default:
+                          break;
+                      }
+                    });
+                  },
                 ));
           }
         });
@@ -273,28 +359,6 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
       },
     );
     _bannerAd?.load();
-  }
-
-  void _onUfoTapped(GameState gameState) {
-    _ufoAnimController.stop();
-    setState(() => _isUfoVisible = false);
-
-    const double approxTrackLength = 1400.0;
-    final double totalFleetPerSec = gameState.trackShips.fold<double>(
-      0.0,
-      (sum, s) =>
-          sum + (s.calculateIncomePayout() * (s.baseSpeed / approxTrackLength)),
-    );
-
-    _openGameModal((ctx) => MysteryCardModal(
-          fleetIncomePerLap: max(20.0, totalFleetPerSec),
-          highestTierUnlocked: gameState.highestTierUnlocked,
-          onRewardChosen: (reward, {bool doubleWithAd = false}) {
-            ref
-                .read(gameStateProvider.notifier)
-                .applyMysteryCardReward(reward, doubleWithAd: doubleWithAd);
-          },
-        ));
   }
 
   void _onCometTapped(GameState gameState) {
@@ -329,12 +393,11 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
     _cargoDropTimer?.cancel();
     _feverTimer?.cancel();
     _bossIncursionTimer?.cancel();
-    _ufoSpawnTimer?.cancel();
-    _initialUfoTimer?.cancel();
     _cometSpawnTimer?.cancel();
     _initialCometTimer?.cancel();
-    _ufoAnimController.dispose();
     _cometAnimController.dispose();
+    _coinBounceController.dispose();
+    _vfxController.dispose();
     _bannerAd?.dispose();
     super.dispose();
   }
@@ -368,6 +431,9 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
 
         final gameState = ref.read(gameStateProvider);
 
+        // If onboarding tutorial is still in progress, NEVER interrupt the player with popups!
+        if (gameState.tutorialStep < 5) return;
+
         if (offlineResult != null && offlineResult.hasSignificantEarnings) {
           await _openGameModal((ctx) => OfflineEarningsModal(
                 result: offlineResult,
@@ -375,39 +441,23 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
                   ref
                       .read(gameStateProvider.notifier)
                       .claimOfflineEarnings(offlineResult.coinsEarned);
-                  Navigator.of(ctx).pop();
                 },
                 onClaimDoubled: () {
                   ref.read(gameStateProvider.notifier).claimOfflineEarnings(
                         offlineResult.coinsEarned,
                         doubleReward: true,
                       );
-                  Navigator.of(ctx).pop();
                 },
               ));
-        } else if (gameState.canClaimDailyReward) {
+        } else if (gameState.canClaimDailyReward &&
+            UserGrowthService.isFeatureUnlocked(
+              GameFeature.dailyCalendar,
+              highestTier: gameState.highestTierUnlocked,
+            )) {
           await _openGameModal((ctx) => const DailyCalendarModal());
-        }
-
-        // On every startup/restart: Show VIP Membership Plans comparison if not yet purchased!
-        if (mounted) {
-          final updatedState = ref.read(gameStateProvider);
-          if (!updatedState.hasRemovedAds) {
-            await Future.delayed(const Duration(milliseconds: 300));
-            if (mounted) {
-              await _openGameModal((ctx) => const MembershipPlansModal());
-            }
-          }
         }
       } catch (e) {
         debugPrint('[MainGameScreen] Startup sequence exception: $e');
-        // Fallback: If loader errored or resolved immediately
-        if (mounted) {
-          final currentState = ref.read(gameStateProvider);
-          if (!currentState.hasRemovedAds) {
-            _openGameModal((ctx) => const MembershipPlansModal());
-          }
-        }
       }
     });
   }
@@ -471,16 +521,65 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
           );
         }
       }
+
+      // Priority 2: Cadet Graduation (Step 4 -> Step 5)
+      // Priority 2: Cadet Graduation (Step 4 -> Step 5)
+      if (prev != null && prev.tutorialStep < 5 && next.tutorialStep == 5) {
+        final scaffoldMessenger = ScaffoldMessenger.of(context);
+        Future.delayed(const Duration(milliseconds: 600), () {
+          if (!mounted) return;
+          scaffoldMessenger.showSnackBar(
+            SnackBar(
+              backgroundColor: const Color(0xFF0F172A),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: const BorderSide(color: Color(0xFF00FF88), width: 1.5),
+              ),
+              content: const Row(
+                children: [
+                  Text('🎓', style: TextStyle(fontSize: 22)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'CADET TRAINING COMPLETE! 🎓',
+                          style: TextStyle(
+                            color: Color(0xFF00FF88),
+                            fontWeight: FontWeight.w900,
+                            fontSize: 12,
+                          ),
+                        ),
+                        Text(
+                          'Flight Academy Passed! Merge spaceships to advance your Fleet!',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        });
+      }
     });
 
     final gameState = ref.watch(gameStateProvider);
     final adState = ref.watch(adStateProvider);
 
 
-    final weather = CosmicWeatherModel.getTodaysWeather();
     final double nitroMultiplier = gameState.isNitroActive ? 3.0 : 1.0;
 
-    // Sync active track ships, active boss, multi-laser finish lines, circuit tier, speed upgrades, fever mode, nitro, and sector theme with Flame Game engine
+    // Sync active track ships, active boss, multi-laser finish lines, circuit tier, speed upgrades, nitro, and sector theme with Flame Game engine
     _galacticGame.updateShips(gameState.trackShips);
     _galacticGame.syncBoss(gameState.activeBoss);
     _galacticGame.updateFinishLines(gameState.finishLinesCount);
@@ -489,15 +588,15 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
     _galacticGame.setSpeedMultiplier(
       (adState.isSpeedBoostActive ? 2.0 : 1.0) *
           nitroMultiplier *
-          weather.speedMultiplier *
           gameState.fleetSpeedMultiplier *
           gameState.permanentSpeedMultiplier,
-      isFever: gameState.isFeverActive,
+      isFever: gameState.isNitroActive,
     );
 
     _galacticGame.updateSectorTheme(
       SectorThemeModel.getThemeForSector(gameState.career.sectorLevel),
     );
+    _galacticGame.updateTutorialActive(gameState.tutorialStep < 5);
 
 
 
@@ -524,13 +623,17 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
     // Dynamic evolving purchase tier (scales with max unlocked tier and tech)
     final int dropTier =
         ref.watch(gameStateProvider.notifier).activeStoreBuyTier;
-    final double nextBuyCost = ShipModel.calculatePurchaseCost(
+    final double rawNextBuyCost = ShipModel.calculatePurchaseCost(
       gameState.totalShipsPurchased,
       dropTier,
       discount: discountSkill.currentBonusValue,
     );
+    // In Tutorial Step 2 ("Buy Second Ship"), ensure it is affordable with earned coins!
+    final double nextBuyCost =
+        gameState.tutorialStep == 2 ? min(rawNextBuyCost, gameState.credits) : rawNextBuyCost;
     final bool canAffordShip =
-        gameState.credits >= nextBuyCost && gameState.gridSlots.contains(null);
+        (gameState.credits >= nextBuyCost || gameState.tutorialStep == 2) &&
+        gameState.gridSlots.contains(null);
 
     return Scaffold(
       backgroundColor: GameTheme.backgroundVoid,
@@ -542,8 +645,8 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
             // 1. Top Banner Ad Slot (Hidden if Remove Ads purchased)
             _buildTopBannerSlot(gameState),
 
-            // 2. Streamlined Top Header (Currencies + Weather Chip + VIP + Settings)
-            _buildStreamlinedHeader(gameState, weather),
+            // 2. Streamlined Top Header (Currencies + VIP + Settings)
+            _buildStreamlinedHeader(gameState),
 
             // 3. Smart Contextual Objective Ticker (1 Dynamic Bar: Combat / Cadet / Milestone)
             _buildSmartContextualObjectiveTicker(gameState),
@@ -590,32 +693,70 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
                       onAcceptWithDetails: (details) {
                         final int fromSlot = details.data;
                         final ship = gameState.gridSlots[fromSlot];
-                        final success = ref
+                        final result = ref
                             .read(gameStateProvider.notifier)
                             .dispatchShipToTrack(fromSlot);
-                        if (success) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              backgroundColor: const Color(0xFF131B3A),
-                              content: Row(
-                                children: [
-                                  const Icon(Icons.rocket_launch_rounded,
-                                      color: Color(0xFF00F0FF), size: 18),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    ship != null
-                                        ? '🚀 Level ${ship.tier} Launched! Earning Coins +25 💰'
-                                        : '🚀 Spaceship on Track! Earning Coins +25 💰',
-                                    style: const TextStyle(
-                                        color: Color(0xFF00F0FF),
-                                        fontWeight: FontWeight.bold),
-                                  ),
-                                ],
-                              ),
-                              duration: const Duration(milliseconds: 1200),
-                            ),
-                          );
+
+                        String message = '';
+                        Color badgeColor = const Color(0xFF00F0FF);
+                        IconData icon = Icons.rocket_launch_rounded;
+
+                        switch (result) {
+                          case DispatchResult.successAdded:
+                            message = ship != null
+                                ? '🚀 Tier ${ship.tier} Launched! Active Fleet (${ref.read(gameStateProvider).trackShips.length}/4) 💰'
+                                : '🚀 Spaceship on Track! Earning Coins +25 💰';
+                            badgeColor = const Color(0xFF00FF88);
+                            icon = Icons.rocket_launch_rounded;
+                            break;
+                          case DispatchResult.successReplaced:
+                            message = '⚡ Fleet Upgraded! Tier ${ship?.tier} replaced lower active ship (4/4 Max)';
+                            badgeColor = const Color(0xFFFFD700);
+                            icon = Icons.upgrade_rounded;
+                            break;
+                          case DispatchResult.alreadyOnTrack:
+                            message = 'ℹ️ Tier ${ship?.tier} is already flying in active fleet!';
+                            badgeColor = Colors.white70;
+                            icon = Icons.info_outline_rounded;
+                            break;
+                          case DispatchResult.fleetFullLowerTier:
+                            message = '⚠️ Fleet is Full (4/4)! Merge ships on the grid to deploy higher tiers.';
+                            badgeColor = const Color(0xFFFF9900);
+                            icon = Icons.warning_amber_rounded;
+                            break;
+                          case DispatchResult.invalidShip:
+                            return;
                         }
+
+                        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            backgroundColor: const Color(0xFF131B3A),
+                            behavior: SnackBarBehavior.floating,
+                            margin: const EdgeInsets.only(bottom: 12, left: 16, right: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(color: badgeColor.withAlpha(120), width: 1.2),
+                            ),
+                            content: Row(
+                              children: [
+                                Icon(icon, color: badgeColor, size: 18),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    message,
+                                    style: TextStyle(
+                                      color: badgeColor,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            duration: const Duration(milliseconds: 1500),
+                          ),
+                        );
                       },
                       builder: (context, candidateData, rejectedData) {
                         final bool isHovered = candidateData.isNotEmpty;
@@ -763,46 +904,6 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
                         ),
                       ),
 
-                    // Live Animated Golden UFO Event
-                    if (_isUfoVisible)
-                      AnimatedBuilder(
-                        animation: _ufoAnimation,
-                        builder: (context, child) {
-                          return Positioned(
-                            left: _ufoAnimation.value,
-                            top: 20.0 + sin(_ufoAnimController.value * 4 * pi) * 14.0,
-                            child: GestureDetector(
-                              onTap: () => _onUfoTapped(gameState),
-                              child: Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: const Color(0xFFFFD700)
-                                      .withAlpha((0.25 * 255).round()),
-                                  border: Border.all(
-                                      color: const Color(0xFFFFD700),
-                                      width: 1.5),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(0xFFFFD700)
-                                          .withAlpha((0.5 * 255).round()),
-                                      blurRadius: 16,
-                                      spreadRadius: 2,
-                                    ),
-                                  ],
-                                ),
-                                child: Image.asset(
-                                  'assets/kenney_space-shooter-remastered/PNG/ufoYellow.png',
-                                  width: 34,
-                                  height: 34,
-                                  fit: BoxFit.contain,
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-
                     // Live Animated Golden Comet Event
                     if (_isCometVisible)
                       AnimatedBuilder(
@@ -843,8 +944,8 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
 
                     // Hyperspace Nitro Overdrive Activation Pill Button
                     Positioned(
-                      bottom: 8,
-                      right: 8,
+                      top: 8,
+                      right: 10,
                       child: InkWell(
                         borderRadius: BorderRadius.circular(16),
                         onTap: () {
@@ -965,13 +1066,29 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
             ),
           ],
         ),
-        if (gameState.tutorialStep < 5 &&
-            gameState.highestTierUnlocked <= 1)
+        // GPU-Accelerated Flying Coins Magnet, Floating Arcade Texts & Merge Shockwaves
+        IdleVfxOverlay(controller: _vfxController),
+
+        if (gameState.tutorialStep < 5)
           TutorialGuideOverlay(
             tutorialStep: gameState.tutorialStep,
             targetKey: _getTutorialTargetKey(gameState.tutorialStep),
+            destinationKey: _getTutorialDestinationKey(gameState.tutorialStep),
             onSkip: () {
               ref.read(gameStateProvider.notifier).advanceTutorialStep(5);
+            },
+          )
+        else if (!gameState.hasSeenSortTutorial &&
+            gameState.isGridUnsorted &&
+            UserGrowthService.isFeatureUnlocked(
+              GameFeature.autoSort,
+              highestTier: gameState.highestTierUnlocked,
+            ))
+          TutorialGuideOverlay(
+            tutorialStep: 10,
+            targetKey: _sortButtonGlobalKey,
+            onSkip: () {
+              ref.read(gameStateProvider.notifier).skipSortTutorial();
             },
           ),
       ],
@@ -1037,134 +1154,107 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
     );
   }
 
-  Widget _buildStreamlinedHeader(GameState state, CosmicWeatherModel weather) {
+  Widget _buildStreamlinedHeader(GameState state) {
+    const double approxTrackLength = 1400.0;
+    final adState = ref.watch(adStateProvider);
+    final double speedMult = state.fleetSpeedMultiplier *
+        (adState.isSpeedBoostActive ? 2.0 : 1.0);
+    final double incomeMult = (adState.isSpeedBoostActive ? 2.0 : 1.0);
+
+    final double estimatedIncomePerSecond = state.trackShips.fold<double>(
+      0.0,
+      (sum, s) =>
+          sum +
+          (s.calculateIncomePayout(multiplier: incomeMult) *
+              state.finishLinesCount *
+              (s.baseSpeed * speedMult / approxTrackLength)),
+    );
+
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: GameTheme.glassCard(radius: 14),
+      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0C1024).withAlpha(220),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFF00F0FF).withAlpha(45),
+          width: 1.1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(180),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
       child: Row(
         children: [
-          // 1. Soft Credits Counter
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
-            decoration: BoxDecoration(
-              color: GameTheme.neonGold.withAlpha((0.15 * 255).round()),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: GameTheme.neonGold.withAlpha((0.35 * 255).round()),
-                width: 0.9,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.monetization_on_rounded,
-                  color: GameTheme.neonGold,
-                  size: 14,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  NumberFormatter.formatCredits(state.credits),
-                  style: const TextStyle(
-                    color: GameTheme.neonGold,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 6),
-
-          // 2. Hard Currency (Dark Matter)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
-            decoration: BoxDecoration(
-              color: GameTheme.neonPurple.withAlpha((0.15 * 255).round()),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: GameTheme.neonPurple.withAlpha((0.35 * 255).round()),
-                width: 0.9,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.auto_awesome_rounded,
-                  color: GameTheme.neonPurple,
-                  size: 14,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  NumberFormatter.formatDarkMatter(state.darkMatter),
-                  style: const TextStyle(
-                    color: GameTheme.neonPurple,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 6),
-
-          // 3. Compact Weather Pill (Tapping shows quick forecast toast)
+          // 1. Credits Pill (Soft Currency + Live Income Telemetry)
           Expanded(
-            child: InkWell(
-              borderRadius: BorderRadius.circular(10),
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    backgroundColor: const Color(0xFF0F172A),
-                    content: Row(
-                      children: [
-                        Text(weather.iconEmoji, style: const TextStyle(fontSize: 16)),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            '${weather.title.toUpperCase()} • ${weather.subtitle}',
-                            style: TextStyle(
-                              color: weather.themeColor,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    duration: const Duration(seconds: 3),
-                  ),
-                );
-              },
+            flex: 5,
+            child: ScaleTransition(
+              scale: _coinBounceAnimation,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                key: _coinCounterGlobalKey,
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
                 decoration: BoxDecoration(
-                  color: weather.themeColor.withAlpha((0.12 * 255).round()),
-                  borderRadius: BorderRadius.circular(10),
+                  gradient: LinearGradient(
+                    colors: [
+                      GameTheme.neonGold.withAlpha(45),
+                      const Color(0xFF1B180A),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: weather.themeColor.withAlpha((0.35 * 255).round()),
-                    width: 0.8,
+                    color: GameTheme.neonGold.withAlpha(110),
+                    width: 1.0,
                   ),
                 ),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(weather.iconEmoji, style: const TextStyle(fontSize: 11)),
-                    const SizedBox(width: 3),
-                    Flexible(
-                      child: Text(
-                        weather.title.toUpperCase(),
-                        style: TextStyle(
-                          color: weather.themeColor,
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0.4,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                    Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: GameTheme.neonGold.withAlpha(50),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.monetization_on_rounded,
+                        color: GameTheme.neonGold,
+                        size: 14,
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            NumberFormatter.formatCredits(state.credits),
+                            style: const TextStyle(
+                              color: GameTheme.neonGold,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.2,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (estimatedIncomePerSecond > 0)
+                            Text(
+                              '+${NumberFormatter.formatCredits(estimatedIncomePerSecond)}/s',
+                              style: const TextStyle(
+                                color: Color(0xFF00FF88),
+                                fontSize: 8.5,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.2,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                        ],
                       ),
                     ),
                   ],
@@ -1174,73 +1264,175 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
           ),
           const SizedBox(width: 6),
 
-          // 4. VIP Pass Button
-          InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: () {
-              _openGameModal((ctx) => const MembershipPlansModal());
-            },
+          // 2. Dark Matter Pill (Hard Currency)
+          Expanded(
+            flex: 4,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              key: _darkMatterCounterGlobalKey,
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
               decoration: BoxDecoration(
-                color: state.hasRemovedAds
-                    ? const Color(0xFF00FF88).withAlpha((0.20 * 255).round())
-                    : const Color(0xFFFFD700).withAlpha((0.20 * 255).round()),
-                borderRadius: BorderRadius.circular(8),
+                gradient: LinearGradient(
+                  colors: [
+                    GameTheme.neonPurple.withAlpha(45),
+                    const Color(0xFF190C28),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: state.hasRemovedAds
-                      ? const Color(0xFF00FF88)
-                      : const Color(0xFFFFD700),
+                  color: GameTheme.neonPurple.withAlpha(100),
                   width: 1.0,
                 ),
               ),
               child: Row(
-                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    state.hasRemovedAds
-                        ? Icons.verified_rounded
-                        : Icons.workspace_premium_rounded,
-                    color: state.hasRemovedAds
-                        ? const Color(0xFF00FF88)
-                        : const Color(0xFFFFD700),
-                    size: 13,
+                  Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      color: GameTheme.neonPurple.withAlpha(50),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.diamond_rounded,
+                      color: GameTheme.neonPurple,
+                      size: 14,
+                    ),
                   ),
-                  const SizedBox(width: 2),
-                  Text(
-                    state.hasRemovedAds ? 'VIP' : 'PLANS',
-                    style: TextStyle(
-                      color: state.hasRemovedAds
-                          ? const Color(0xFF00FF88)
-                          : const Color(0xFFFFD700),
-                      fontSize: 8.5,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0.3,
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          NumberFormatter.formatDarkMatter(state.darkMatter),
+                          style: const TextStyle(
+                            color: GameTheme.neonPurple,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.2,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const Text(
+                          'DARK MATTER',
+                          style: TextStyle(
+                            color: Colors.white38,
+                            fontSize: 7.0,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.3,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
           ),
-          const SizedBox(width: 5),
+          const SizedBox(width: 6),
 
-          // 5. Settings Gear Button
-          InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: () {
-              _openGameModal((ctx) => const SettingsModal());
-            },
-            child: Container(
-              padding: const EdgeInsets.all(5),
-              decoration: BoxDecoration(
-                color: Colors.white10,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white24),
+          // 3. VIP / Membership Plans Button
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () {
+                _openGameModal((ctx) => const MembershipPlansModal());
+              },
+              child: Container(
+                height: 36,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: state.hasRemovedAds
+                        ? [
+                            const Color(0xFF00FF88).withAlpha(50),
+                            const Color(0xFF004D28),
+                          ]
+                        : [
+                            const Color(0xFFFFD700).withAlpha(55),
+                            const Color(0xFF4A3800),
+                          ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: state.hasRemovedAds
+                        ? const Color(0xFF00FF88)
+                        : const Color(0xFFFFD700),
+                    width: 1.1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: (state.hasRemovedAds
+                              ? const Color(0xFF00FF88)
+                              : const Color(0xFFFFD700))
+                          .withAlpha(40),
+                      blurRadius: 6,
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      state.hasRemovedAds
+                          ? Icons.verified_rounded
+                          : Icons.workspace_premium_rounded,
+                      color: state.hasRemovedAds
+                          ? const Color(0xFF00FF88)
+                          : const Color(0xFFFFD700),
+                      size: 15,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      state.hasRemovedAds ? 'VIP' : 'PLANS',
+                      style: TextStyle(
+                        color: state.hasRemovedAds
+                            ? const Color(0xFF00FF88)
+                            : const Color(0xFFFFD700),
+                        fontSize: 10.0,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              child: const Icon(
-                Icons.settings_rounded,
-                color: Colors.white70,
-                size: 14,
+            ),
+          ),
+          const SizedBox(width: 6),
+
+          // 4. Settings Button
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () {
+                _openGameModal((ctx) => const SettingsModal());
+              },
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(15),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.white.withAlpha(40),
+                    width: 1.0,
+                  ),
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.settings_rounded,
+                    color: Colors.white70,
+                    size: 16,
+                  ),
+                ),
               ),
             ),
           ),
@@ -1276,7 +1468,7 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
   Widget _buildCommanderLearningQuestHud(GameState gameState) {
 
     // 1. Initial Cadet Steps (0, 1, 2, 3, 4)
-    if (gameState.tutorialStep < 5 && gameState.highestTierUnlocked <= 1) {
+    if (gameState.tutorialStep < 5) {
       String title;
       String instruction;
       IconData icon;
@@ -1284,38 +1476,38 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
 
       switch (gameState.tutorialStep) {
         case 0:
-          title = 'STEP 1/5: LET\'S RACE! 🏎️';
+          title = 'STEP 1/5: LAUNCH YOUR SHIP! 🚀';
           instruction =
-              'Drag your spaceship onto the track to start making coins! 💰';
+              'Drag your spaceship up onto the track to start making coins! 💰';
           icon = Icons.flight_takeoff_rounded;
           color = const Color(0xFF00F0FF);
           break;
         case 1:
-          title = 'STEP 2/5: BUY SECOND SHIP! 🚀';
+          title = 'STEP 2/5: TURBO TAP SPEED! ⚡';
           instruction =
-              'Tap [BUY SHIP] below to add another ship to your grid!';
-          icon = Icons.shopping_cart_rounded;
-          color = const Color(0xFFFFD700);
-          break;
-        case 2:
-          title = 'STEP 3/5: SMASH TO UPGRADE! 💥';
-          instruction =
-              'Drag matching ships together to merge into a faster ship! 🚀+🚀=🛸';
-          icon = Icons.auto_awesome_rounded;
-          color = const Color(0xFFBD00FF);
-          break;
-        case 3:
-          title = 'STEP 4/5: TURBO SPEED! ⚡';
-          instruction =
-              'Tap the racetrack fast to make your ships fly in turbo mode!';
+              'Tap the racetrack 3 times fast to boost your speed and earn rapid coins!';
           icon = Icons.bolt_rounded;
           color = const Color(0xFFFF0055);
           break;
+        case 2:
+          title = 'STEP 3/5: BUY SECOND SHIP! 🛸';
+          instruction =
+              'You earned coins! Tap [BUY SHIP] below to add another spaceship!';
+          icon = Icons.shopping_cart_rounded;
+          color = const Color(0xFFFFD700);
+          break;
+        case 3:
+          title = 'STEP 4/5: SMASH TO MERGE! 💥';
+          instruction =
+              'Drag matching Level 1 ships together to create a Level 2 ship! 🚀+🚀=🛸';
+          icon = Icons.auto_awesome_rounded;
+          color = const Color(0xFFBD00FF);
+          break;
         case 4:
         default:
-          title = 'STEP 5/5: BOOST ENGINE SPEED! 🏁';
+          title = 'STEP 5/5: CIRCUIT LASER GATES! 🏁';
           instruction =
-              'Tap [FLEET SPEED] to permanently make all your ships fly faster!';
+              'Tap [SPEED] or [LASER GATE] to double your circuit earnings forever!';
           icon = Icons.speed_rounded;
           color = const Color(0xFF00FF88);
           break;
@@ -1566,7 +1758,8 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
 
 
   Widget _buildCircuitEngineeringStrip(GameState gameState) {
-    final bool canAffordSpeed =
+    final bool isSpeedMaxed = gameState.isFleetSpeedMaxed;
+    final bool canAffordSpeed = !isSpeedMaxed &&
         gameState.credits >= gameState.fleetSpeedUpgradeCost;
     final bool isPadsUnlocked = UserGrowthService.isFeatureUnlocked(
         GameFeature.hyperPads,
@@ -1599,6 +1792,19 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
               key: _fleetSpeedGlobalKey,
               borderRadius: BorderRadius.circular(8),
               onTap: () {
+                if (isSpeedMaxed) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      backgroundColor: Color(0xFF1E293B),
+                      content: Text(
+                        '⚡ Fleet Engine Speed is at MAX Level (Lv. 30)!',
+                        style: TextStyle(color: Color(0xFFFFD700)),
+                      ),
+                      duration: Duration(milliseconds: 900),
+                    ),
+                  );
+                  return;
+                }
                 final success =
                     ref.read(gameStateProvider.notifier).upgradeFleetSpeed();
                 if (!success) {
@@ -1618,14 +1824,18 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
                 padding:
                     const EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
                 decoration: BoxDecoration(
-                  color: canAffordSpeed
-                      ? const Color(0xFF00F0FF).withAlpha((0.15 * 255).round())
-                      : Colors.white.withAlpha((0.04 * 255).round()),
+                  color: isSpeedMaxed
+                      ? const Color(0xFFFFD700).withAlpha((0.15 * 255).round())
+                      : (canAffordSpeed
+                          ? const Color(0xFF00F0FF).withAlpha((0.15 * 255).round())
+                          : Colors.white.withAlpha((0.04 * 255).round())),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: canAffordSpeed
-                        ? const Color(0xFF00F0FF)
-                        : Colors.white12,
+                    color: isSpeedMaxed
+                        ? const Color(0xFFFFD700)
+                        : (canAffordSpeed
+                            ? const Color(0xFF00F0FF)
+                            : Colors.white12),
                     width: 0.9,
                   ),
                 ),
@@ -1633,9 +1843,11 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(Icons.speed_rounded,
-                        color: canAffordSpeed
-                            ? const Color(0xFF00F0FF)
-                            : Colors.white38,
+                        color: isSpeedMaxed
+                            ? const Color(0xFFFFD700)
+                            : (canAffordSpeed
+                                ? const Color(0xFF00F0FF)
+                                : Colors.white38),
                         size: 12),
                     const SizedBox(width: 3),
                     Flexible(
@@ -1644,11 +1856,15 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'SPEED Lv.${gameState.fleetSpeedLevel}',
+                            isSpeedMaxed
+                                ? 'SPEED MAX'
+                                : 'SPEED Lv.${gameState.fleetSpeedLevel}',
                             style: TextStyle(
-                              color: canAffordSpeed
-                                  ? const Color(0xFF00F0FF)
-                                  : Colors.white60,
+                              color: isSpeedMaxed
+                                  ? const Color(0xFFFFD700)
+                                  : (canAffordSpeed
+                                      ? const Color(0xFF00F0FF)
+                                      : Colors.white60),
                               fontSize: 8,
                               fontWeight: FontWeight.w900,
                             ),
@@ -1656,12 +1872,16 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
                             overflow: TextOverflow.ellipsis,
                           ),
                           Text(
-                            NumberFormatter.formatCredits(
-                                gameState.fleetSpeedUpgradeCost),
+                            isSpeedMaxed
+                                ? 'MAX LEVEL'
+                                : NumberFormatter.formatCredits(
+                                    gameState.fleetSpeedUpgradeCost),
                             style: TextStyle(
-                              color: canAffordSpeed
+                              color: isSpeedMaxed
                                   ? const Color(0xFFFFD700)
-                                  : Colors.white38,
+                                  : (canAffordSpeed
+                                      ? const Color(0xFFFFD700)
+                                      : Colors.white38),
                               fontSize: 7.5,
                               fontWeight: FontWeight.bold,
                             ),
@@ -1686,13 +1906,13 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
               onTap: () {
                 if (!isPadsUnlocked) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      backgroundColor: Color(0xFF131B3A),
+                    SnackBar(
+                      backgroundColor: const Color(0xFF131B3A),
                       content: Text(
-                        '🔒 Hyper-Pads unlock at Commander Rank 3 (Ship Tier 3)!',
-                        style: TextStyle(color: Color(0xFFFFB703)),
+                        '🔒 Hyper-Pads unlock at Ship Tier ${UserGrowthService.getRequiredTier(GameFeature.hyperPads)}!',
+                        style: const TextStyle(color: Color(0xFFFFB703)),
                       ),
-                      duration: Duration(milliseconds: 900),
+                      duration: const Duration(milliseconds: 900),
                     ),
                   );
                   return;
@@ -1850,14 +2070,15 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
                       highestTier: gameState.highestTierUnlocked);
 
                   if (!isEvolveUnlocked) {
+                    final reqTier = UserGrowthService.getRequiredTier(GameFeature.trackEvolution);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        backgroundColor: Color(0xFF131B3A),
+                      SnackBar(
+                        backgroundColor: const Color(0xFF131B3A),
                         content: Text(
-                          '🔒 Track Circuit Evolution unlocks at Commander Rank 4 (Ship Tier 4)!',
-                          style: TextStyle(color: Color(0xFFBD00FF)),
+                          '🔒 Track Circuit Evolution unlocks at Spacecraft Tier $reqTier!',
+                          style: const TextStyle(color: Color(0xFFBD00FF)),
                         ),
-                        duration: Duration(milliseconds: 900),
+                        duration: const Duration(milliseconds: 900),
                       ),
                     );
                     return;
@@ -2500,9 +2721,47 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
                     !isLocked && details.data != index,
                 onAcceptWithDetails: (details) {
                   final int fromIndex = details.data;
+                  final fromShip = state.gridSlots[fromIndex];
+                  final targetShip = state.gridSlots[index];
+                  final bool isMerge = fromShip != null &&
+                      targetShip != null &&
+                      !fromShip.isBox &&
+                      !targetShip.isBox &&
+                      fromShip.tier == targetShip.tier;
+
                   ref
                       .read(gameStateProvider.notifier)
                       .handleGridMergeOrMove(fromIndex, index);
+
+                  if (isMerge) {
+                    final ro = context.findRenderObject();
+                    final dropPos = (ro is RenderBox && ro.hasSize)
+                        ? ro.localToGlobal(ro.size.center(Offset.zero))
+                        : details.offset;
+
+                    // 1. Expanding Radial Neon Shockwave Ring
+                    _vfxController.spawnShockwave(
+                      origin: dropPos,
+                      color: targetShip.glowColor,
+                      maxRadius: 55.0,
+                    );
+
+                    // 2. Floating Arcade Text
+                    _vfxController.spawnFloatingText(
+                      origin: dropPos,
+                      text: 'TIER ${fromShip.tier + 1}! 🚀',
+                      color: const Color(0xFF00FF88),
+                      fontSize: 14.5,
+                    );
+
+                    // 3. Spray of Flying Coins toward Wallet
+                    _vfxController.spawnCoins(
+                      origin: dropPos,
+                      targetKey: _coinCounterGlobalKey,
+                      count: 6,
+                      onTargetHit: _triggerCoinWalletBounce,
+                    );
+                  }
                 },
                 builder: (context, candidateData, rejectedData) {
                   final bool isHovered = candidateData.isNotEmpty;
@@ -2557,9 +2816,15 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
                         if (ship != null)
                           (ship.isBox
                               ? GestureDetector(
-                                  onTap: () => ref
-                                      .read(gameStateProvider.notifier)
-                                      .openCrate(index),
+                                  onTap: () {
+                                    AdManager().showRewardedAd(
+                                      onUserEarnedReward: () {
+                                        ref
+                                            .read(gameStateProvider.notifier)
+                                            .openCrate(index);
+                                      },
+                                    );
+                                  },
                                   child: _buildCrateTileContent(),
                                 )
                               : Draggable<int>(
@@ -2797,24 +3062,41 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
                   size: iconSize * 0.65,
                 ),
 
-                // "TAP OPEN" Badge
+                // "▶ AD GIFT" Badge
                 Positioned(
-                  bottom: 0,
+                  bottom: -1,
                   child: Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        const EdgeInsets.symmetric(horizontal: 4.5, vertical: 1.5),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFF0055),
-                      borderRadius: BorderRadius.circular(4),
+                      color: const Color(0xFFFFB800),
+                      borderRadius: BorderRadius.circular(5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFFFB800).withAlpha(160),
+                          blurRadius: 4,
+                        )
+                      ],
                     ),
-                    child: const Text(
-                      'TAP OPEN',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 6.5,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.4,
-                      ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.play_arrow_rounded,
+                          color: Colors.black,
+                          size: 9,
+                        ),
+                        SizedBox(width: 1),
+                        Text(
+                          'AD GIFT',
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontSize: 6.5,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -2828,13 +3110,24 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
 
 
   int _getHubBadgeCount(GameState state) {
+    final int tier = state.highestTierUnlocked;
     int count = 0;
     count += state.career.missions.where((m) => m.isCompleted && !m.isClaimed).length;
-    count += state.readyExpeditionsCount;
-    count += state.unclaimedAchievementsCount;
-    if (state.canClaimDailyReward) count++;
-    if (state.canSpinFree) count++;
-    if (state.activeBoss != null && !state.activeBoss!.isDead) count++;
+    if (UserGrowthService.isFeatureUnlocked(GameFeature.expeditions, highestTier: tier)) {
+      count += state.readyExpeditionsCount;
+    }
+    if (UserGrowthService.isFeatureUnlocked(GameFeature.achievements, highestTier: tier)) {
+      count += state.unclaimedAchievementsCount;
+    }
+    if (UserGrowthService.isFeatureUnlocked(GameFeature.dailyCalendar, highestTier: tier) && state.canClaimDailyReward) {
+      count++;
+    }
+    if (UserGrowthService.isFeatureUnlocked(GameFeature.roulette, highestTier: tier) && state.canSpinFree) {
+      count++;
+    }
+    if (UserGrowthService.isFeatureUnlocked(GameFeature.bossBeacon, highestTier: tier) && state.activeBoss != null && !state.activeBoss!.isDead) {
+      count++;
+    }
     return count;
   }
 
@@ -2965,7 +3258,7 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
                   GameFeature.autoMerge,
                   highestTier: gameState.highestTierUnlocked,
                 ),
-                requiredTier: 2,
+                requiredTier: UserGrowthService.getRequiredTier(GameFeature.autoMerge),
                 onTap: () {
                   if (!gameState.hasRemovedAds) {
                     _showAutoMergePremiumDialog(context);
@@ -2985,6 +3278,7 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
               ),
               const SizedBox(height: 3),
               _buildMiniDockButton(
+                key: _sortButtonGlobalKey,
                 icon: Icons.sort_rounded,
                 label: 'SORT',
                 color: const Color(0xFF00F0FF),
@@ -2992,7 +3286,7 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
                   GameFeature.autoSort,
                   highestTier: gameState.highestTierUnlocked,
                 ),
-                requiredTier: 2,
+                requiredTier: UserGrowthService.getRequiredTier(GameFeature.autoSort),
                 onTap: () {
                   final sorted = ref.read(gameStateProvider.notifier).sortGridSlots();
                   if (sorted) {
@@ -3016,57 +3310,72 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
           ),
           const SizedBox(width: 6),
 
-          // 3. Center Hero CTA: BUY SHIP
-          Expanded(
-            child: SizedBox(
-              height: 44,
-              child: ElevatedButton(
-                key: _buyShipGlobalKey,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: canAffordShip ? GameTheme.neonCyan : Colors.grey.shade800,
-                  foregroundColor: canAffordShip ? Colors.black : Colors.white54,
-                  elevation: canAffordShip ? 6 : 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+          // 3. Center Hero CTA: BUY SHIP (Evolves with Ship Tier & Upgrades)
+          Builder(builder: (context) {
+            final shipDef = ShipModel.create(dropTier);
+            final Color tierColor = canAffordShip ? shipDef.glowColor : Colors.grey.shade800;
+            final Color textColor = canAffordShip
+                ? (tierColor.computeLuminance() > 0.4 ? Colors.black : Colors.white)
+                : Colors.white54;
+
+            return Expanded(
+              child: SizedBox(
+                height: 44,
+                child: ElevatedButton(
+                  key: _buyShipGlobalKey,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: tierColor,
+                    foregroundColor: textColor,
+                    elevation: canAffordShip ? 6 : 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
-                ),
-                onPressed: canAffordShip
-                    ? () {
-                        ref.read(gameStateProvider.notifier).purchaseShip();
-                      }
-                    : null,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.rocket_launch_rounded, size: 16),
-                      const SizedBox(width: 4),
-                      Text(
-                        'BUY T$dropTier • ',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 12,
-                          letterSpacing: 0.3,
+                  onPressed: canAffordShip
+                      ? () {
+                          ref.read(gameStateProvider.notifier).purchaseShip();
+                        }
+                      : null,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Image.asset(
+                          shipDef.spriteAsset,
+                          width: 20,
+                          height: 20,
+                          fit: BoxFit.contain,
                         ),
-                      ),
-                      Text(
-                        NumberFormatter.formatCredits(nextBuyCost),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 13,
+                        const SizedBox(width: 4),
+                        Text(
+                          'BUY T$dropTier • ',
+                          style: TextStyle(
+                            color: textColor,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 12,
+                            letterSpacing: 0.3,
+                          ),
                         ),
-                      ),
-                    ],
+                        Text(
+                          NumberFormatter.formatCredits(nextBuyCost),
+                          style: TextStyle(
+                            color: textColor,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
+            );
+          }),
           const SizedBox(width: 6),
 
-          // 4. 2X Speed Boost Button
+          // 4. 2X Speed Boost Button (Video Ad Rewarded)
           InkWell(
             borderRadius: BorderRadius.circular(10),
             onTap: () {
@@ -3078,7 +3387,7 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
               );
             },
             child: Container(
-              width: 44,
+              width: 48,
               height: 44,
               decoration: BoxDecoration(
                 color: adState.isSpeedBoostActive
@@ -3088,33 +3397,78 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
                 border: Border.all(
                   color: adState.isSpeedBoostActive
                       ? const Color(0xFFFF9900)
-                      : Colors.white24,
+                      : const Color(0xFFFF9900).withAlpha(120),
                   width: 1.0,
                 ),
               ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
                 children: [
-                  Icon(
-                    Icons.bolt_rounded,
-                    color: adState.isSpeedBoostActive
-                        ? const Color(0xFFFF9900)
-                        : Colors.white70,
-                    size: 16,
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        adState.isSpeedBoostActive
+                            ? Icons.bolt_rounded
+                            : Icons.smart_display_rounded,
+                        color: adState.isSpeedBoostActive
+                            ? const Color(0xFFFF9900)
+                            : const Color(0xFFFFB703),
+                        size: 16,
+                      ),
+                      Text(
+                        adState.isSpeedBoostActive
+                            ? NumberFormatter.formatSeconds(
+                                adState.speedBoostRemainingSeconds)
+                            : '2X SPEED',
+                        style: TextStyle(
+                          color: adState.isSpeedBoostActive
+                              ? const Color(0xFFFF9900)
+                              : Colors.white,
+                          fontSize: 7.0,
+                          fontWeight: FontWeight.w900,
+                        ),
+                        maxLines: 1,
+                      ),
+                    ],
                   ),
-                  Text(
-                    adState.isSpeedBoostActive
-                        ? NumberFormatter.formatSeconds(adState.speedBoostRemainingSeconds)
-                        : '2X SPEED',
-                    style: TextStyle(
-                      color: adState.isSpeedBoostActive
-                          ? const Color(0xFFFF9900)
-                          : Colors.white70,
-                      fontSize: 7.5,
-                      fontWeight: FontWeight.w900,
+                  if (!adState.isSpeedBoostActive)
+                    Positioned(
+                      top: -4,
+                      right: -3,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 3.5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFF9900),
+                          borderRadius: BorderRadius.circular(4),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFFF9900)
+                                  .withAlpha((0.7 * 255).round()),
+                              blurRadius: 4,
+                            ),
+                          ],
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.play_arrow_rounded,
+                                color: Colors.black, size: 7),
+                            Text(
+                              'AD',
+                              style: TextStyle(
+                                color: Colors.black,
+                                fontSize: 6.5,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                    maxLines: 1,
-                  ),
                 ],
               ),
             ),
@@ -3196,6 +3550,7 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
   }
 
   Widget _buildMiniDockButton({
+    GlobalKey? key,
     required IconData icon,
     required String label,
     required Color color,
@@ -3204,6 +3559,7 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
     required VoidCallback onTap,
   }) {
     return InkWell(
+      key: key,
       borderRadius: BorderRadius.circular(6),
       onTap: isUnlocked
           ? onTap

@@ -36,33 +36,33 @@ class RouletteRewardModel {
   /// The 8 canonical sectors on the Wormhole Roulette Wheel
   static List<RouletteRewardModel> getSegments() {
     return const [
-      // 0. Supernova Jackpot (100x Lap Income)
+      // 0. Supernova Jackpot (100x Top-Tier Ship Lap Income)
       RouletteRewardModel(
         id: 'spin_jackpot',
-        title: '100X JACKPOT',
-        description: 'Instant 100X lap income credit explosion!',
+        title: 'SUPERNOVA 100X',
+        description: 'Instant 100X top ship lap income explosion!',
         type: RouletteRewardType.supernovaJackpot,
         icon: Icons.star_rounded,
         color: Color(0xFFFFD700), // Gold
         valueMultiplier: 100.0,
       ),
 
-      // 1. Dark Matter Stash (+30 DM)
+      // 1. Dark Matter Stash (+50 DM)
       RouletteRewardModel(
         id: 'spin_dark_matter',
-        title: '+35 DARK MATTER',
-        description: 'Cosmic singularity gems for quantum tree upgrades.',
+        title: '+50 DARK MATTER',
+        description: 'Cosmic singularity crystals for Quantum Skill Tree upgrades.',
         type: RouletteRewardType.darkMatter,
         icon: Icons.diamond_rounded,
         color: Color(0xFFBD00FF), // Neon Purple
-        count: 35,
+        count: 50,
       ),
 
-      // 2. High-Tier Ship Drop
+      // 2. High-Tier Fleet Ship Drop
       RouletteRewardModel(
         id: 'spin_ship_drop',
-        title: 'FLEET DROP',
-        description: 'Instant high-tier spacecraft delivered to flight deck!',
+        title: 'HIGH-TIER SHIP',
+        description: 'Instant top-tier combat spacecraft deployed directly to deck!',
         type: RouletteRewardType.shipDrop,
         icon: Icons.rocket_launch_rounded,
         color: Color(0xFF00F5FF), // Neon Cyan
@@ -72,51 +72,51 @@ class RouletteRewardModel {
       RouletteRewardModel(
         id: 'spin_time_warp',
         title: '2-HR TIME WARP',
-        description: 'Instantly fast-forward 2 hours of idle fleet earnings!',
+        description: 'Instantly fast-forward 2 hours of idle fleet revenue!',
         type: RouletteRewardType.timeWarp,
         icon: Icons.timelapse_rounded,
         color: Color(0xFF00FF88), // Neon Green
         count: 7200, // 2 hours in seconds
       ),
 
-      // 4. Hyperdrive Overload (Fever Rush)
+      // 4. Hyperspace Fever Rush (30s)
       RouletteRewardModel(
         id: 'spin_fever',
-        title: 'FEVER RUSH',
-        description: 'Instant 30-second max Hyperspace Fever Rush!',
+        title: '30s HYPER FEVER',
+        description: 'Instant 30-second hyperspace warp boost (2x speed + 2x credits)!',
         type: RouletteRewardType.feverRush,
         icon: Icons.local_fire_department_rounded,
         color: Color(0xFFFF9900), // Neon Orange
         count: 30,
       ),
 
-      // 5. Ancient Relic Cache (+3 Shards)
+      // 5. Ancient Relic Shards (+5 Shards)
       RouletteRewardModel(
         id: 'spin_relics',
-        title: '+3 RELIC SHARDS',
-        description: 'Ancient alien artifacts to level up permanent passives.',
+        title: '+5 RELIC SHARDS',
+        description: 'Ancient alien relic shards to level up permanent multipliers.',
         type: RouletteRewardType.relicShards,
         icon: Icons.auto_awesome_rounded,
         color: Color(0xFFFF0055), // Crimson
-        count: 3,
+        count: 5,
       ),
 
-      // 6. Galactic Treasury (15x Lap Income)
+      // 6. Galactic Treasury (25x Lap Income)
       RouletteRewardModel(
         id: 'spin_credits',
-        title: '15X CREDITS',
-        description: 'Massive cash windfall from deep space convoys.',
+        title: '25X CREDITS',
+        description: 'Instant 25X top ship lap payout windfall!',
         type: RouletteRewardType.creditsMultiplier,
         icon: Icons.monetization_on_rounded,
         color: Color(0xFF00E5FF),
-        valueMultiplier: 15.0,
+        valueMultiplier: 25.0,
       ),
 
-      // 7. Jackpot Mystery Crate
+      // 7. Mystery Cargo Crate
       RouletteRewardModel(
         id: 'spin_crate',
-        title: 'MYSTERY CRATE',
-        description: 'A glowing cosmic supply drop delivered to the deck.',
+        title: 'AD GIFT CRATE',
+        description: 'A glowing cosmic supply drop packed with high-tier spacecraft!',
         type: RouletteRewardType.mysteryCrate,
         icon: Icons.card_giftcard_rounded,
         color: Color(0xFFFFE600),

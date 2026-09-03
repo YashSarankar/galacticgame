@@ -62,6 +62,35 @@ class StorageService {
   }
 
 
+  static const String _purchasesKey = 'galactic_game_purchases_ledger';
+
+  /// Record a permanent in-app purchase receipt in persistent storage
+  static Future<void> recordPurchaseReceipt(String productId) async {
+    try {
+      _prefs ??= await SharedPreferences.getInstance();
+      final List<String> list = _prefs!.getStringList(_purchasesKey) ?? [];
+      if (!list.contains(productId)) {
+        list.add(productId);
+        await _prefs!.setStringList(_purchasesKey, list);
+      }
+    } catch (e) {
+      debugPrint('[StorageService] Error recording receipt: $e');
+    }
+  }
+
+  /// Check if a permanent in-app purchase receipt exists in persistent storage
+  static bool hasPurchasedReceipt(String productId) {
+    if (_prefs == null) return false;
+    final List<String> list = _prefs!.getStringList(_purchasesKey) ?? [];
+    return list.contains(productId);
+  }
+
+  /// Returns all validated in-app purchase receipts
+  static List<String> getPurchasedReceipts() {
+    if (_prefs == null) return [];
+    return _prefs!.getStringList(_purchasesKey) ?? [];
+  }
+
   /// Clear all saved data from storage
   static Future<void> clearAll() async {
     try {

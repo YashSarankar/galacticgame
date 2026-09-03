@@ -138,7 +138,9 @@ class OfflineEarningsModal extends StatelessWidget {
                   AdManager().showRewardedAd(
                     onUserEarnedReward: () {
                       onClaimDoubled();
-                      Navigator.of(context).pop();
+                      if (context.mounted) {
+                        Navigator.of(context).pop();
+                      }
                     },
                   );
                 },

@@ -59,6 +59,12 @@ class GalacticFlameGame extends FlameGame with TapCallbacks {
   @override
   Color backgroundColor() => const Color(0xFF04060E);
 
+  bool _isTutorialActive = false;
+
+  void updateTutorialActive(bool isTutorial) {
+    _isTutorialActive = isTutorial;
+  }
+
   void updateSectorTheme(SectorThemeModel theme) {
     _currentTheme = theme;
     if (_isInitialized) {
@@ -72,17 +78,28 @@ class GalacticFlameGame extends FlameGame with TapCallbacks {
     super.onTapDown(event);
     onCanvasTapped?.call();
 
-    // Spawn touch ripple & dynamic sector sparks
+    // Give active racing ships an instant supersonic speed surge impulse
+    for (final shipComp in _activeShipComponents) {
+      shipComp.triggerTapSurge();
+    }
+
+    // Spawn touch ripple, supersonic warp speed streaks & dynamic sector sparks
     add(RadialShockwaveComponent(
       position: event.canvasPosition,
       color: _currentTheme.trackPrimaryGlow,
-      maxRadius: 32.0,
+      maxRadius: 36.0,
       duration: 0.35,
     ));
     add(SparkBurstComponent(
       position: event.canvasPosition,
       baseColor: _currentTheme.particleSparkColor,
       count: 14,
+    ));
+    add(WarpSpeedLinesComponent(
+      position: event.canvasPosition,
+      color: _currentTheme.trackPrimaryGlow,
+      duration: 0.35,
+      lineCount: 16,
     ));
   }
 
@@ -111,10 +128,13 @@ class GalacticFlameGame extends FlameGame with TapCallbacks {
     super.update(dt);
     if (!_isInitialized) return;
 
-    _asteroidTimer += dt;
-    if (_asteroidTimer >= 13.0) {
-      _asteroidTimer = 0.0;
-      _spawnAsteroidHazard();
+    // Suppress asteroid hazards during new player tutorial to avoid distraction
+    if (!_isTutorialActive) {
+      _asteroidTimer += dt;
+      if (_asteroidTimer >= 13.0) {
+        _asteroidTimer = 0.0;
+        _spawnAsteroidHazard();
+      }
     }
   }
 
@@ -333,6 +353,7 @@ class GalacticFlameGame extends FlameGame with TapCallbacks {
     if (_activeShipComponents.length == _currentShips.length) {
       for (int i = 0; i < _currentShips.length; i++) {
         _activeShipComponents[i].updateShipModel(_currentShips[i]);
+        _activeShipComponents[i].updateTrackMetric(_track.pathMetric!, totalLen);
         _activeShipComponents[i].updateGateOffsets(gateOffsets);
         _activeShipComponents[i].updateBoostPadOffsets(boostPadOffsets);
         _activeShipComponents[i].boostPadMultiplier = _boostPadMultiplier;

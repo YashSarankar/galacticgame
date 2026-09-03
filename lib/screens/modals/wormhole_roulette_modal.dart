@@ -78,10 +78,24 @@ class _WormholeRouletteModalState extends ConsumerState<WormholeRouletteModal>
   }
 
 
+  void _onSpinTapped() {
+    if (_isSpinning) return;
+    final gameState = ref.read(gameStateProvider);
+    if (gameState.canSpinFree) {
+      _spinWheel();
+    } else if (gameState.canSpinAd) {
+      AdManager().showRewardedAd(
+        onUserEarnedReward: () {
+          _spinWheel();
+        },
+      );
+    }
+  }
+
   void _spinWheel() {
     if (_isSpinning) return;
     final gameState = ref.read(gameStateProvider);
-    if (!gameState.canSpinFree) return;
+    if (gameState.isDailySpinsExhausted) return;
 
     final random = Random();
     final int winningIndex = random.nextInt(_segments.length);
@@ -221,237 +235,391 @@ class _WormholeRouletteModalState extends ConsumerState<WormholeRouletteModal>
   @override
   Widget build(BuildContext context) {
     final gameState = ref.watch(gameStateProvider);
-    final bool canSpin = gameState.canSpinFree && !_isSpinning;
-    final int extraSpins = gameState.extraSpinsCount;
+    final int usedSpins = gameState.effectiveDailySpinsUsed;
+    final bool canSpinFree = gameState.canSpinFree;
+    final bool canSpinAd = gameState.canSpinAd;
+    final bool canSpinAny = gameState.canSpinAny && !_isSpinning;
 
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
       child: Container(
-        padding: const EdgeInsets.all(20),
+        constraints: const BoxConstraints(maxWidth: 420),
+        padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           color: const Color(0xFF080B18).withAlpha((0.96 * 255).round()),
           borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: const Color(0xFF00F5FF), width: 1.8),
+          border: Border.all(
+            color: canSpinFree
+                ? const Color(0xFF00F5FF)
+                : (canSpinAd ? const Color(0xFFFFB800) : Colors.white24),
+            width: 1.8,
+          ),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF00F5FF).withAlpha((0.35 * 255).round()),
+              color: (canSpinFree
+                      ? const Color(0xFF00F5FF)
+                      : (canSpinAd ? const Color(0xFFFFB800) : Colors.white10))
+                  .withAlpha((0.35 * 255).round()),
               blurRadius: 24,
               spreadRadius: 2,
             )
           ],
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Header
-            Row(
-              children: [
-                const Icon(
-                  Icons.blur_circular_rounded,
-                  color: Color(0xFF00F5FF),
-                  size: 22,
-                ),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text(
-                    'WORMHOLE ROULETTE',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0.6,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Row(
+                children: [
+                  Icon(
+                    Icons.blur_circular_rounded,
+                    color: canSpinFree
+                        ? const Color(0xFF00F5FF)
+                        : (canSpinAd ? const Color(0xFFFFB800) : Colors.white60),
+                    size: 22,
                   ),
-                ),
-                IconButton(
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  icon: const Icon(Icons.close, color: Colors.white60, size: 20),
-                  onPressed: _isSpinning
-                      ? null
-                      : () => Navigator.of(context).pop(),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 12),
-
-            // Wheel Display with Pointer
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                // Wheel Circle Canvas
-                Transform.rotate(
-                  angle: _currentAngle,
-                  child: CustomPaint(
-                    size: const Size(260, 260),
-                    painter: _RouletteWheelPainter(segments: _segments),
-                  ),
-                ),
-
-                // Center Glowing Hub / Spin Action
-                GestureDetector(
-                  onTap: canSpin ? _spinWheel : null,
-                  child: Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(
-                        colors: canSpin
-                            ? [const Color(0xFF00F5FF), const Color(0xFF0D1B3E)]
-                            : [Colors.grey.shade700, Colors.grey.shade900],
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'WORMHOLE ROULETTE',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.6,
                       ),
-                      border: Border.all(
-                        color: canSpin
-                            ? const Color(0xFF00F5FF)
-                            : Colors.white24,
-                        width: 2.5,
-                      ),
-                      boxShadow: canSpin
-                          ? [
-                              BoxShadow(
-                                color: const Color(0xFF00F5FF)
-                                    .withAlpha((0.6 * 255).round()),
-                                blurRadius: 16,
-                                spreadRadius: 2,
-                              )
-                            ]
-                          : null,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    child: Center(
-                      child: Text(
-                        _isSpinning
-                            ? 'WARP'
-                            : (canSpin ? 'SPIN!' : 'LOCKED'),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0.5,
+                  ),
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    icon:
+                        const Icon(Icons.close, color: Colors.white60, size: 20),
+                    onPressed: _isSpinning
+                        ? null
+                        : () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 8),
+
+              // Daily 3-Spin Progress Track (1 Free, 2 Ad Spins)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(10),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white12),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildSpinBadge(
+                      label: '1. FREE',
+                      isDone: usedSpins >= 1,
+                      isCurrent: usedSpins == 0,
+                      color: const Color(0xFF00F5FF),
+                    ),
+                    Container(width: 12, height: 1, color: Colors.white24),
+                    _buildSpinBadge(
+                      label: '2. AD',
+                      isDone: usedSpins >= 2,
+                      isCurrent: usedSpins == 1,
+                      color: const Color(0xFFFFB800),
+                    ),
+                    Container(width: 12, height: 1, color: Colors.white24),
+                    _buildSpinBadge(
+                      label: '3. AD',
+                      isDone: usedSpins >= 3,
+                      isCurrent: usedSpins == 2,
+                      color: const Color(0xFFFFB800),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              // Wheel Display with Pointer
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  // Wheel Circle Canvas
+                  Transform.rotate(
+                    angle: _currentAngle,
+                    child: CustomPaint(
+                      size: const Size(260, 260),
+                      painter: _RouletteWheelPainter(segments: _segments),
+                    ),
+                  ),
+
+                  // Center Glowing Hub / Spin Action
+                  GestureDetector(
+                    onTap: canSpinAny ? _onSpinTapped : null,
+                    child: Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: canSpinFree
+                              ? [const Color(0xFF00F5FF), const Color(0xFF0D1B3E)]
+                              : (canSpinAd
+                                  ? [
+                                      const Color(0xFFFFB800),
+                                      const Color(0xFF3E220D)
+                                    ]
+                                  : [
+                                      Colors.grey.shade700,
+                                      Colors.grey.shade900
+                                    ]),
+                        ),
+                        border: Border.all(
+                          color: canSpinFree
+                              ? const Color(0xFF00F5FF)
+                              : (canSpinAd
+                                  ? const Color(0xFFFFB800)
+                                  : Colors.white24),
+                          width: 2.5,
+                        ),
+                        boxShadow: canSpinAny
+                            ? [
+                                BoxShadow(
+                                  color: (canSpinFree
+                                          ? const Color(0xFF00F5FF)
+                                          : const Color(0xFFFFB800))
+                                      .withAlpha((0.6 * 255).round()),
+                                  blurRadius: 16,
+                                  spreadRadius: 2,
+                                )
+                              ]
+                            : null,
+                      ),
+                      child: Center(
+                        child: Text(
+                          _isSpinning
+                              ? 'WARP'
+                              : (canSpinFree
+                                  ? 'SPIN!'
+                                  : (canSpinAd ? 'AD SPIN' : 'LOCKED')),
+                          style: TextStyle(
+                            color: canSpinAny ? Colors.black : Colors.white54,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.4,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
 
-                // Top Pointer Needle
-                Positioned(
-                  top: 0,
-                  child: CustomPaint(
-                    size: const Size(22, 26),
-                    painter: _PointerPainter(),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-
-            // Spin Status / Action Buttons
-            if (canSpin) ...[
-              Text(
-                extraSpins > 0
-                    ? '⚡ $extraSpins EXTRA SPINS AVAILABLE!'
-                    : '✨ FREE DAILY SPIN READY!',
-                style: const TextStyle(
-                  color: Color(0xFF00FF88),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                height: 44,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00F5FF),
-                    foregroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+                  // Top Pointer Needle
+                  Positioned(
+                    top: 0,
+                    child: CustomPaint(
+                      size: const Size(22, 26),
+                      painter: _PointerPainter(),
                     ),
                   ),
-                  icon: const Icon(Icons.refresh_rounded, size: 18),
-                  label: const Text(
-                    'SPIN NOW',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  onPressed: _isSpinning ? null : _spinWheel,
-                ),
+                ],
               ),
-            ] else ...[
-              Builder(
-                builder: (context) {
-                  final int now = DateTime.now().millisecondsSinceEpoch;
-                  final int nextSpinTime =
-                      gameState.lastFreeSpinTimestamp + (24 * 60 * 60 * 1000);
-                  final int diffMs = max(0, nextSpinTime - now);
-                  final int remainingSeconds = (diffMs / 1000).ceil();
-                  final int hours = remainingSeconds ~/ 3600;
-                  final int minutes = (remainingSeconds % 3600) ~/ 60;
-                  final int seconds = remainingSeconds % 60;
-                  final String timerStr =
-                      '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+              const SizedBox(height: 16),
 
-                  return Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.timer_outlined,
-                          size: 13, color: Color(0xFF00F5FF)),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Next Free Spin in: $timerStr',
-                        style: const TextStyle(
-                          color: Color(0xFF00F5FF),
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
+              // Spin Status / Action Buttons
+              if (canSpinFree) ...[
+                const Text(
+                  '✨ 100% FREE DAILY SPIN READY! (1/3)',
+                  style: TextStyle(
+                    color: Color(0xFF00FF88),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF00F5FF),
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
                       ),
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(height: 10),
+                    ),
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: const Text(
+                      'SPIN FOR FREE (1/3)',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    onPressed: _isSpinning ? null : _spinWheel,
+                  ),
+                ),
+              ] else if (canSpinAd) ...[
+                Text(
+                  '🎬 WATCH AD TO SPIN (${usedSpins + 1}/3)',
+                  style: const TextStyle(
+                    color: Color(0xFFFFB800),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFFB800),
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    icon: const Icon(Icons.play_circle_fill_rounded, size: 18),
+                    label: Text(
+                      'WATCH AD TO SPIN (${usedSpins + 1}/3)',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    onPressed: _isSpinning ? null : _onSpinTapped,
+                  ),
+                ),
+              ] else ...[
+                Builder(
+                  builder: (context) {
+                    final int now = DateTime.now().millisecondsSinceEpoch;
+                    final int nextSpinTime =
+                        gameState.lastDailySpinResetTimestamp +
+                            (24 * 60 * 60 * 1000);
+                    final int diffMs = max(0, nextSpinTime - now);
+                    final int remainingSeconds = (diffMs / 1000).ceil();
+                    final int hours = remainingSeconds ~/ 3600;
+                    final int minutes = (remainingSeconds % 3600) ~/ 60;
+                    final int seconds = remainingSeconds % 60;
+                    final String timerStr =
+                        '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
 
-              SizedBox(
-                width: double.infinity,
-                height: 44,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFF9900),
-                    foregroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  icon: const Icon(Icons.play_circle_fill_rounded, size: 18),
-                  label: const Text(
-                    'WATCH AD (+1 SPIN)',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  onPressed: () {
-                    AdManager().showRewardedAd(
-                      onUserEarnedReward: () {
-                        ref
-                            .read(gameStateProvider.notifier)
-                            .addExtraSpin(count: 1);
-                      },
+                    return Column(
+                      children: [
+                        const Text(
+                          '🔒 ALL 3 DAILY SPINS COMPLETED (3/3)',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.timer_outlined,
+                                size: 13, color: Color(0xFF00F5FF)),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Next Free Spin in: $timerStr',
+                              style: const TextStyle(
+                                color: Color(0xFF00F5FF),
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     );
                   },
                 ),
-              ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white12,
+                      foregroundColor: Colors.white38,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    onPressed: null,
+                    child: const Text(
+                      'COME BACK TOMORROW (3/3 USED)',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildSpinBadge({
+    required String label,
+    required bool isDone,
+    required bool isCurrent,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: isDone
+            ? const Color(0xFF00FF88).withAlpha(30)
+            : (isCurrent ? color.withAlpha(40) : Colors.transparent),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isDone
+              ? const Color(0xFF00FF88)
+              : (isCurrent ? color : Colors.white24),
+          width: 1.1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isDone
+                ? Icons.check_circle_rounded
+                : (isCurrent
+                    ? Icons.radio_button_checked_rounded
+                    : Icons.radio_button_unchecked_rounded),
+            size: 11,
+            color: isDone
+                ? const Color(0xFF00FF88)
+                : (isCurrent ? color : Colors.white38),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 9.5,
+              fontWeight: FontWeight.w900,
+              color: isDone
+                  ? const Color(0xFF00FF88)
+                  : (isCurrent ? color : Colors.white38),
+            ),
+          ),
+        ],
       ),
     );
   }

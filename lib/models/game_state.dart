@@ -28,6 +28,8 @@ class GameState {
   final int lastSaveTimestamp; // Epoch milliseconds for offline earnings math
   final int lastFreeSpinTimestamp; // Epoch millis of last daily free spin
   final int extraSpinsCount; // Stored extra spins from ads or boss kills
+  final int dailySpinsUsed; // Number of daily spins used today (0, 1, 2, or 3)
+  final int lastDailySpinResetTimestamp; // Epoch millis of the current 24h spin cycle
   final List<ShipModel?> gridSlots; // 16 items for 4x4 matrix
   final List<ShipModel> trackShips; // Active ships racing on Flame track
   final List<RelicModel> relics; // Discovered Ancient Alien Relics
@@ -63,7 +65,9 @@ class GameState {
     this.activeBoss,
     required this.lastSaveTimestamp,
     this.lastFreeSpinTimestamp = 0,
-    this.extraSpinsCount = 1, // 1 free starter spin!
+    this.extraSpinsCount = 0,
+    this.dailySpinsUsed = 0,
+    this.lastDailySpinResetTimestamp = 0,
     required this.gridSlots,
     required this.trackShips,
     required this.relics,
@@ -82,6 +86,7 @@ class GameState {
     this.circuitTier = 1,
     this.boostPadLevel = 1,
     this.claimedLearningMilestones = const [],
+    this.hasSeenSortTutorial = false,
     required this.career,
   });
 
@@ -90,6 +95,19 @@ class GameState {
   final int circuitTier;
   final int boostPadLevel;
   final List<int> claimedLearningMilestones;
+  final bool hasSeenSortTutorial;
+
+  /// Detects whether active ships on the grid are scattered out of order (for contextual sort tutorial)
+  bool get isGridUnsorted {
+    final activeShips = gridSlots.where((s) => s != null && !s.isBox).toList();
+    if (activeShips.length < 4) return false;
+    for (int i = 0; i < activeShips.length - 1; i++) {
+      if (activeShips[i]!.tier > activeShips[i + 1]!.tier) {
+        return true;
+      }
+    }
+    return false;
+  }
 
 
   /// Velocity impulse multiplier applied when crossing an on-track Hyper Boost Pad (+15% per level)
@@ -153,12 +171,17 @@ class GameState {
   bool get canEvolveTrack =>
       finishLinesCount >= 4 && credits >= trackEvolutionCost;
 
-  /// Multiplier from Credit-purchased Fleet Engine Speed upgrades (+5% per level)
-  double get fleetSpeedMultiplier => 1.0 + (fleetSpeedLevel - 1) * 0.05;
+  static const int maxFleetSpeedLevel = 30;
+
+  bool get isFleetSpeedMaxed => fleetSpeedLevel >= maxFleetSpeedLevel;
+
+  /// Multiplier from Credit-purchased Fleet Engine Speed upgrades (+2% per level, max Lv.30 = +58% Speed)
+  double get fleetSpeedMultiplier =>
+      1.0 + (min(fleetSpeedLevel, maxFleetSpeedLevel) - 1) * 0.02;
 
   /// Cost to upgrade Fleet Engine Speed to next level
   double get fleetSpeedUpgradeCost =>
-      (250.0 * pow(1.18, fleetSpeedLevel - 1)).floorToDouble();
+      (150.0 * pow(1.30, fleetSpeedLevel - 1)).floorToDouble();
 
   /// Cost to unlock the next multi-laser finish line (up to 4 gates)
   double? get nextFinishLineCost {
@@ -181,10 +204,38 @@ class GameState {
   double get prestigeBossDamageMultiplier => career.prestigeCount >= 3 ? 1.50 : 1.0;
   double get prestigeDarkMatterMultiplier => career.prestigeCount >= 5 ? 2.0 : 1.0;
 
-  bool get canSpinFree {
+  /// Effective daily spins used within current 24h cycle (Max 3 spins: 1 Free + 2 Ad Spins)
+  int get effectiveDailySpinsUsed {
     final now = DateTime.now().millisecondsSinceEpoch;
-    return (now - lastFreeSpinTimestamp) >= (24 * 60 * 60 * 1000) ||
-        extraSpinsCount > 0;
+    if (lastDailySpinResetTimestamp == 0 ||
+        (now - lastDailySpinResetTimestamp) >= (24 * 60 * 60 * 1000)) {
+      return 0;
+    }
+    return dailySpinsUsed;
+  }
+
+  /// 1st Spin in 24h is 100% Free
+  bool get canSpinFree => effectiveDailySpinsUsed == 0;
+
+  /// 2nd and 3rd Spins in 24h are available by watching Rewarded Ads
+  bool get canSpinAd =>
+      effectiveDailySpinsUsed >= 1 && effectiveDailySpinsUsed < 3;
+
+  /// Whether any daily spin is currently available (free or ad)
+  bool get canSpinAny => effectiveDailySpinsUsed < 3;
+
+  /// Remaining daily spins in the current 24h cycle
+  int get remainingDailySpins => max(0, 3 - effectiveDailySpinsUsed);
+
+  /// Whether all 3 spins for the current 24h cycle have been exhausted
+  bool get isDailySpinsExhausted => effectiveDailySpinsUsed >= 3;
+
+  /// Epoch timestamp when the 24h spin cycle resets
+  int get nextSpinResetEpoch {
+    if (effectiveDailySpinsUsed == 0 || lastDailySpinResetTimestamp == 0) {
+      return 0;
+    }
+    return lastDailySpinResetTimestamp + (24 * 60 * 60 * 1000);
   }
 
   /// Whether player is eligible to claim today's Commander Login Reward (20h cooldown)
@@ -256,7 +307,7 @@ class GameState {
       boostPadLevel: 1,
       claimedLearningMilestones: const [],
       gridSlots: slots,
-      trackShips: [ShipModel.create(1)],
+      trackShips: const [],
       relics: RelicModel.getInitialRelics(),
       expeditions: const [],
       achievements: AchievementModel.createInitialList(),
@@ -292,6 +343,8 @@ class GameState {
     int? lastSaveTimestamp,
     int? lastFreeSpinTimestamp,
     int? extraSpinsCount,
+    int? dailySpinsUsed,
+    int? lastDailySpinResetTimestamp,
     List<ShipModel?>? gridSlots,
     List<ShipModel>? trackShips,
     List<RelicModel>? relics,
@@ -310,6 +363,7 @@ class GameState {
     int? circuitTier,
     int? boostPadLevel,
     List<int>? claimedLearningMilestones,
+    bool? hasSeenSortTutorial,
     CareerModel? career,
   }) {
     return GameState(
@@ -335,6 +389,9 @@ class GameState {
       lastFreeSpinTimestamp:
           lastFreeSpinTimestamp ?? this.lastFreeSpinTimestamp,
       extraSpinsCount: extraSpinsCount ?? this.extraSpinsCount,
+      dailySpinsUsed: dailySpinsUsed ?? this.dailySpinsUsed,
+      lastDailySpinResetTimestamp:
+          lastDailySpinResetTimestamp ?? this.lastDailySpinResetTimestamp,
       gridSlots: gridSlots ?? this.gridSlots,
       trackShips: trackShips ?? this.trackShips,
       relics: relics ?? this.relics,
@@ -357,6 +414,7 @@ class GameState {
       boostPadLevel: boostPadLevel ?? this.boostPadLevel,
       claimedLearningMilestones:
           claimedLearningMilestones ?? this.claimedLearningMilestones,
+      hasSeenSortTutorial: hasSeenSortTutorial ?? this.hasSeenSortTutorial,
       career: career ?? this.career,
     );
   }
@@ -374,6 +432,8 @@ class GameState {
       'lastSaveTimestamp': lastSaveTimestamp,
       'lastFreeSpinTimestamp': lastFreeSpinTimestamp,
       'extraSpinsCount': extraSpinsCount,
+      'dailySpinsUsed': dailySpinsUsed,
+      'lastDailySpinResetTimestamp': lastDailySpinResetTimestamp,
       'gridSlots': gridSlots.map((s) => s?.toJson()).toList(),
       'trackShips': trackShips.map((s) => s.toJson()).toList(),
       'relics': relics.map((r) => r.toJson()).toList(),
@@ -392,6 +452,7 @@ class GameState {
       'circuitTier': circuitTier,
       'boostPadLevel': boostPadLevel,
       'claimedLearningMilestones': claimedLearningMilestones,
+      'hasSeenSortTutorial': hasSeenSortTutorial,
       'career': career.toJson(),
     };
   }
@@ -444,7 +505,10 @@ class GameState {
       lastSaveTimestamp: json['lastSaveTimestamp'] as int? ??
           DateTime.now().millisecondsSinceEpoch,
       lastFreeSpinTimestamp: json['lastFreeSpinTimestamp'] as int? ?? 0,
-      extraSpinsCount: json['extraSpinsCount'] as int? ?? 1,
+      extraSpinsCount: json['extraSpinsCount'] as int? ?? 0,
+      dailySpinsUsed: json['dailySpinsUsed'] as int? ?? 0,
+      lastDailySpinResetTimestamp:
+          json['lastDailySpinResetTimestamp'] as int? ?? 0,
       gridSlots: json['gridSlots'] != null
           ? (json['gridSlots'] as List)
               .map((s) => s != null ? ShipModel.fromJson(s as Map<String, dynamic>) : null)
@@ -454,7 +518,7 @@ class GameState {
           ? (json['trackShips'] as List)
               .map((s) => ShipModel.fromJson(s as Map<String, dynamic>))
               .toList()
-          : [ShipModel.create(1)],
+          : (defaultTutorial == 0 ? const [] : [ShipModel.create(1)]),
       relics: json['relics'] != null
           ? (json['relics'] as List)
               .map((r) => RelicModel.fromJson(r as Map<String, dynamic>))
@@ -485,6 +549,8 @@ class GameState {
       claimedLearningMilestones: json['claimedLearningMilestones'] != null
           ? List<int>.from(json['claimedLearningMilestones'] as List)
           : const [],
+      hasSeenSortTutorial:
+          json['hasSeenSortTutorial'] as bool? ?? (highestTier > 3),
       career: json['career'] != null
           ? CareerModel.fromJson(json['career'] as Map<String, dynamic>)
           : CareerModel.initial(),

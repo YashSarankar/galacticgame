@@ -17,8 +17,8 @@ typedef OnShipCrossBoostPad = void Function(
 /// Moving spacecraft component along a closed loop track metric.
 class MovingShipComponent extends PositionComponent {
   ShipModel ship;
-  final ui.PathMetric pathMetric;
-  final double trackTotalLength;
+  ui.PathMetric pathMetric;
+  double trackTotalLength;
   List<double> gateOffsets;
   List<double> boostPadOffsets;
   final OnShipCrossGate onCrossGate;
@@ -49,6 +49,15 @@ class MovingShipComponent extends PositionComponent {
     this.currentDistance = 0.0,
   }) : super(size: Vector2(36, 36), anchor: Anchor.center);
 
+  /// Updates the track geometry and metric when resizing or evolving tracks
+  void updateTrackMetric(ui.PathMetric newMetric, double newLength) {
+    pathMetric = newMetric;
+    trackTotalLength = newLength;
+    if (trackTotalLength > 0) {
+      currentDistance = currentDistance % trackTotalLength;
+    }
+  }
+
   /// Updates active gate offsets dynamically (e.g. when buying new finish lines)
   void updateGateOffsets(List<double> newOffsets) {
     gateOffsets = List.from(newOffsets);
@@ -77,6 +86,11 @@ class MovingShipComponent extends PositionComponent {
       _shipSprite = Sprite(shipImage);
       _cachedSprites[asset] = _shipSprite!;
     } catch (_) {}
+  }
+
+  /// Triggers an immediate +50% speed surge impulse on tap
+  void triggerTapSurge() {
+    _boostTimer = max(_boostTimer, 0.45);
   }
 
   /// Applies a temporary collision penalty (e.g. from hitting an asteroid hazard)
@@ -134,19 +148,26 @@ class MovingShipComponent extends PositionComponent {
     final double prevDist = currentDistance;
     final double newDist = currentDistance + (effectiveSpeed * dt);
 
+    final double wrappedDist = (newDist >= trackTotalLength)
+        ? (newDist % trackTotalLength)
+        : newDist;
+
     // 1. Check crossing for each active gate on the circuit
     for (int i = 0; i < gateOffsets.length; i++) {
       final double gateOffset = gateOffsets[i];
       bool crossed = false;
 
       if (newDist >= trackTotalLength) {
-        if (prevDist < gateOffset && newDist >= gateOffset) {
-          crossed = true;
-        } else if (prevDist < gateOffset &&
-            (newDist % trackTotalLength) >= gateOffset) {
-          crossed = true;
+        // Lap wrapped around the finish line
+        if (gateOffset == 0.0) {
+          crossed = true; // start/finish line passed on lap wrap
+        } else if (prevDist < gateOffset) {
+          crossed = true; // gate was ahead before wrap
+        } else if (wrappedDist >= gateOffset) {
+          crossed = true; // wrapped past gate on new lap
         }
       } else {
+        // Linear segment progression
         if (prevDist < gateOffset && newDist >= gateOffset) {
           crossed = true;
         }
@@ -168,10 +189,11 @@ class MovingShipComponent extends PositionComponent {
       bool crossedPad = false;
 
       if (newDist >= trackTotalLength) {
-        if (prevDist < padOffset && newDist >= padOffset) {
+        if (padOffset == 0.0) {
           crossedPad = true;
-        } else if (prevDist < padOffset &&
-            (newDist % trackTotalLength) >= padOffset) {
+        } else if (prevDist < padOffset) {
+          crossedPad = true;
+        } else if (wrappedDist >= padOffset) {
           crossedPad = true;
         }
       } else {
@@ -238,12 +260,12 @@ class MovingShipComponent extends PositionComponent {
       final glowPaint = Paint()
         ..color = const Color(0xFF00F0FF).withAlpha((0.6 * 255).round())
         ..maskFilter = const MaskFilter.blur(BlurStyle.solid, 8.0);
-      canvas.drawCircle(Offset.zero, 24.0, glowPaint);
+      canvas.drawCircle(Offset(size.x / 2, size.y / 2), 24.0, glowPaint);
     }
 
     if (_fireSprite != null) {
       canvas.save();
-      canvas.translate(0, 16);
+      canvas.translate(size.x / 2, size.y - 2);
       canvas.scale(_boostTimer > 0 ? 1.1 : 0.7, _boostTimer > 0 ? 1.3 : 0.7);
       _fireSprite!.render(canvas, anchor: Anchor.topCenter);
       canvas.restore();
@@ -253,7 +275,6 @@ class MovingShipComponent extends PositionComponent {
       _shipSprite!.render(
         canvas,
         size: size,
-        anchor: Anchor.center,
       );
     }
   }

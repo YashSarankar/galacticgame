@@ -613,22 +613,24 @@ class _DailyCalendarModalState extends ConsumerState<DailyCalendarModal>
               AdManager().showRewardedAd(
                 onUserEarnedReward: () {
                   final success =
-                      notifier.claimDailyLoginReward(multiplier: 2.0);
+                      notifier.claimDailyLoginReward(doubleWithAd: true);
                   if (success) {
                     SoundService().playPurchaseSound();
-                    Navigator.of(context).pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        backgroundColor: Color(0xFF0B2418),
-                        content: Text(
-                          '⚡ 2X DOUBLE Daily Reward Claimed!',
-                          style: TextStyle(
-                            color: Color(0xFF00FF88),
-                            fontWeight: FontWeight.bold,
+                    if (context.mounted) {
+                      Navigator.of(context).pop();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          backgroundColor: Color(0xFF0B2418),
+                          content: Text(
+                            '⚡ 2X DOUBLE Daily Reward Claimed!',
+                            style: TextStyle(
+                              color: Color(0xFF00FF88),
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
-                      ),
-                    );
+                      );
+                    }
                   }
                 },
               );

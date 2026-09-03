@@ -185,12 +185,13 @@ class _SettingsModalState extends ConsumerState<SettingsModal> {
               _buildSectionHeader('AUDIO & CONTROLS'),
               const SizedBox(height: 8),
 
-              Container(
-                decoration: BoxDecoration(
-                  color: GameTheme.backgroundVoid,
+              Material(
+                color: GameTheme.backgroundVoid,
+                shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.white12),
+                  side: const BorderSide(color: Colors.white12),
                 ),
+                clipBehavior: Clip.antiAlias,
                 child: Column(
                   children: [
                     SwitchListTile(

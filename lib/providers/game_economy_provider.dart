@@ -20,10 +20,19 @@ import '../services/user_growth_service.dart';
 
 
 
+enum DispatchResult {
+  successAdded,
+  successReplaced,
+  alreadyOnTrack,
+  fleetFullLowerTier,
+  invalidShip,
+}
+
 class GameEconomyNotifier extends StateNotifier<GameState> {
   final SoundService _soundService = SoundService();
   void Function(int newTierDiscovered)? onShipDiscovered;
   void Function(int tier, List<UnlockedFeatureInfo> features)? onFeatureUnlocked;
+  int _tutorialTapCount = 0;
 
   GameEconomyNotifier(super.initialState);
 
@@ -80,15 +89,10 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
       coinsIncrement: totalPayout,
     );
 
-    // If still in initial step (Drag to track), auto-advance to Buy second ship step!
-    final int nextTutorial =
-        state.tutorialStep == 0 ? 1 : state.tutorialStep;
-
     state = state.copyWith(
       credits: newCredits,
       lifetimeCredits: newLifetime,
       totalLineCrossings: newCrossings,
-      tutorialStep: nextTutorial,
       career: state.career.copyWith(missions: updatedMissions),
     );
 
@@ -97,24 +101,41 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
   }
 
   /// Explicitly dispatches a ship from the grid onto the flight racetrack canvas
-  bool dispatchShipToTrack(int slotIndex) {
-    if (slotIndex < 0 || slotIndex >= state.gridSlots.length) return false;
+  DispatchResult dispatchShipToTrack(int slotIndex) {
+    if (slotIndex < 0 || slotIndex >= state.gridSlots.length) {
+      return DispatchResult.invalidShip;
+    }
     final ship = state.gridSlots[slotIndex];
-    if (ship == null || ship.isBox) return false;
+    if (ship == null || ship.isBox) return DispatchResult.invalidShip;
+
+    // Check if this specific ship is already active on the racetrack
+    if (state.trackShips.any((s) => s.id == ship.id)) {
+      return DispatchResult.alreadyOnTrack;
+    }
+
+    final updatedTrackShips = List<ShipModel>.from(state.trackShips);
+    DispatchResult result = DispatchResult.successAdded;
+
+    if (updatedTrackShips.length >= 4) {
+      // Find lowest tier currently on track
+      updatedTrackShips.sort((a, b) => a.tier.compareTo(b.tier));
+      final int lowestTier = updatedTrackShips.first.tier;
+      if (ship.tier > lowestTier) {
+        // Upgrade fleet: Replace lowest tier with the new higher-tier starship
+        updatedTrackShips.removeAt(0);
+        updatedTrackShips.add(ship);
+        result = DispatchResult.successReplaced;
+      } else {
+        // Validation: Fleet capacity is full (4/4) and cannot accept lower or equal tier
+        return DispatchResult.fleetFullLowerTier;
+      }
+    } else {
+      updatedTrackShips.add(ship);
+      result = DispatchResult.successAdded;
+    }
 
     final int nextTutorial = state.tutorialStep == 0 ? 1 : state.tutorialStep;
     final double starterBonus = state.tutorialStep == 0 ? 25.0 : 0.0;
-
-    // Explicitly deploy the dragged ship onto the track fleet (up to 4 ships)
-    final updatedTrackShips = List<ShipModel>.from(state.trackShips);
-    if (!updatedTrackShips.any((s) => s.id == ship.id)) {
-      if (updatedTrackShips.length >= 4) {
-        // Replace the lowest tier ship currently on track
-        updatedTrackShips.sort((a, b) => a.tier.compareTo(b.tier));
-        updatedTrackShips.removeAt(0);
-      }
-      updatedTrackShips.add(ship);
-    }
 
     state = state.copyWith(
       credits: state.credits + starterBonus,
@@ -125,11 +146,12 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
 
     _soundService.playPurchaseSound();
     _autoSaveDebounced();
-    return true;
+    return result;
   }
 
-  /// Upgrade Fleet Engine Speed (+5% speed per level) using Credits
+  /// Upgrade Fleet Engine Speed (+2% speed per level, max Lv.30) using Credits
   bool upgradeFleetSpeed() {
+    if (state.isFleetSpeedMaxed) return false;
     final double cost = state.fleetSpeedUpgradeCost;
     if (state.credits < cost) return false;
 
@@ -157,9 +179,17 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
       return false;
     }
 
+    // Advance tutorial step 4 (Circuit Laser Gates) -> Step 5 (Completed)
+    final int nextTutorial = state.tutorialStep == 4 ? 5 : state.tutorialStep;
+    final double rewardBonus = state.tutorialStep == 4 ? 250.0 : 0.0;
+    final double rewardDM = state.tutorialStep == 4 ? 10.0 : 0.0;
+
     state = state.copyWith(
-      credits: state.credits - cost,
+      credits: state.credits - cost + rewardBonus,
+      lifetimeCredits: state.lifetimeCredits + rewardBonus,
+      darkMatter: state.darkMatter + rewardDM,
       finishLinesCount: state.finishLinesCount + 1,
+      tutorialStep: nextTutorial,
     );
     _soundService.playPrestigeSound();
     _autoSaveDebounced();
@@ -229,61 +259,30 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
 
 
   void tapRacetrackBoost() {
-    // If on tutorial step 3 (Tap to Warp), advance to Step 4 (Fleet Speed)!
-    if (state.tutorialStep == 3) {
-      state = state.copyWith(tutorialStep: 4);
-    }
-
-    if (state.isFeverActive) return; // Already maxed in fever mode
-
-    final double newCharge = min(1.0, state.feverCharge + 0.04);
-    if (newCharge >= 1.0) {
-      // Trigger Hyperspace Fever Rush!
-      state = state.copyWith(
-        feverCharge: 1.0,
-        isFeverActive: true,
-        feverTimeRemaining: 10.0,
-      );
-      _soundService.playFeverSound();
-    } else {
-      state = state.copyWith(feverCharge: newCharge);
-      _soundService.playTrackTapSound();
-    }
-  }
-
-
-  /// Ticks down active fever timer or slowly decays idle charge
-  void tickFever(double dt) {
-    if (state.isFeverActive) {
-      final double remaining = state.feverTimeRemaining - dt;
-      if (remaining <= 0) {
+    // If on tutorial step 1 (Turbo Tap Speed), require 3 energetic taps to advance to Step 2!
+    if (state.tutorialStep == 1) {
+      _tutorialTapCount++;
+      const double tapReward = 15.0;
+      if (_tutorialTapCount >= 3) {
         state = state.copyWith(
-          isFeverActive: false,
-          feverTimeRemaining: 0.0,
-          feverCharge: 0.0,
+          tutorialStep: 2,
+          credits: state.credits + tapReward + 25.0,
+          lifetimeCredits: state.lifetimeCredits + tapReward + 25.0,
         );
       } else {
         state = state.copyWith(
-          feverTimeRemaining: remaining,
-          feverCharge: remaining / 10.0,
+          credits: state.credits + tapReward,
+          lifetimeCredits: state.lifetimeCredits + tapReward,
         );
       }
-    } else if (state.feverCharge > 0) {
-      // Slow passive decay (2.5% per second) if not tapping
-      final double decayed = max(0.0, state.feverCharge - (dt * 0.025));
-      state = state.copyWith(feverCharge: decayed);
     }
 
-    // Reset combo message and combo chain multiplier after 2.5 seconds of inactivity
-    if (state.lastComboMessage.isNotEmpty) {
-      final int now = DateTime.now().millisecondsSinceEpoch;
-      if (now - state.lastMergeTimestamp > 2500) {
-        state = state.copyWith(
-          lastComboMessage: '',
-          comboCount: 0,
-        );
-      }
+    // Tapping directly charges Nitro Overdrive (+3.5% per tap)
+    if (!state.isNitroActive && state.nitroCharge < 1.0) {
+      final double newCharge = min(1.0, state.nitroCharge + 0.035);
+      state = state.copyWith(nitroCharge: newCharge);
     }
+    _soundService.playTrackTapSound();
   }
 
   /// Ticks down active Nitro Warp timer or passively recharges Nitro bar (recharges in 45s)
@@ -304,6 +303,17 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     } else if (state.nitroCharge < 1.0) {
       final double recharged = min(1.0, state.nitroCharge + (dt / 45.0));
       state = state.copyWith(nitroCharge: recharged);
+    }
+
+    // Reset combo message after 2.5 seconds of inactivity
+    if (state.lastComboMessage.isNotEmpty) {
+      final int now = DateTime.now().millisecondsSinceEpoch;
+      if (now - state.lastMergeTimestamp > 2500) {
+        state = state.copyWith(
+          lastComboMessage: '',
+          comboCount: 0,
+        );
+      }
     }
   }
 
@@ -343,12 +353,13 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     );
 
     final int dropTier = activeStoreBuyTier;
-    final double cost = ShipModel.calculatePurchaseCost(
-
+    final double rawCost = ShipModel.calculatePurchaseCost(
       state.totalShipsPurchased,
       dropTier,
       discount: discountSkill.currentBonusValue,
     );
+    // In Tutorial Step 2 ("Buy Second Ship"), ensure player can afford it with earned coins
+    final double cost = state.tutorialStep == 2 ? min(rawCost, state.credits) : rawCost;
 
     if (state.credits < cost) {
       return false; // Not enough credits
@@ -383,9 +394,9 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
       unlockedTier: dropTier,
     );
 
-    // Advance tutorial step 1 (Buy Ship) -> Step 2 (Merge Ships)
+    // Advance tutorial step 2 (Buy Ship) -> Step 3 (Merge Ships)
     final int nextTutorial =
-        state.tutorialStep == 1 ? 2 : state.tutorialStep;
+        state.tutorialStep == 2 ? 3 : state.tutorialStep;
 
     state = state.copyWith(
       credits: newCredits,
@@ -421,7 +432,8 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     );
 
     final int techBase = 1 + baseTierSkill.level;
-    final int milestoneTier = max(1, state.highestTierUnlocked - 2);
+    // Upgrade buy button tier to (highestTierUnlocked - 1) upon discovering higher tiers
+    final int milestoneTier = max(1, state.highestTierUnlocked - 1);
     return max(techBase, milestoneTier);
   }
 
@@ -620,13 +632,16 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
         newAcknowledged.add(newTier);
       }
 
-      // Advance tutorial step if on Step 1 or Step 2 -> Step 3 (Tap to Warp)
+      // Advance tutorial step 3 (Merge Ships) -> Step 4 (Circuit Laser Gates / Fleet Speed)
       final int nextTutorial =
-          (state.tutorialStep == 1 || state.tutorialStep == 2) ? 3 : state.tutorialStep;
+          state.tutorialStep == 3 ? 4 : state.tutorialStep;
+      final double tutorialMergeGrant =
+          state.tutorialStep == 3 ? 150.0 : 0.0;
 
       state = state.copyWith(
-        credits: state.credits + bonusCredits,
-        lifetimeCredits: state.lifetimeCredits + bonusCredits,
+        credits: state.credits + bonusCredits + tutorialMergeGrant,
+        lifetimeCredits:
+            state.lifetimeCredits + bonusCredits + tutorialMergeGrant,
         gridSlots: newSlots,
         trackShips: computeTrackFleet(newSlots),
         totalMergesCount: newMergeCount,
@@ -689,9 +704,9 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
       return -1.0;
     }
 
+    // Balanced scrap refund: 30% of base tier price (avoids purchase count exponential inflation)
     final double refund =
-        ShipModel.calculatePurchaseCost(state.totalShipsPurchased, ship.tier) *
-            0.7;
+        (ShipModel.calculatePurchaseCost(0, ship.tier) * 0.30).floorToDouble();
 
     final newSlots = List<ShipModel?>.from(state.gridSlots);
     newSlots[slotIndex] = null;
@@ -804,7 +819,14 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
       newSlots[i] = state.gridSlots[i];
     }
 
+    final double bonusCredits = !state.hasSeenSortTutorial ? 50.0 : 0.0;
+    final double bonusDM = !state.hasSeenSortTutorial ? 5.0 : 0.0;
+
     state = state.copyWith(
+      credits: state.credits + bonusCredits,
+      lifetimeCredits: state.lifetimeCredits + bonusCredits,
+      darkMatter: state.darkMatter + bonusDM,
+      hasSeenSortTutorial: true,
       gridSlots: newSlots,
       trackShips: computeTrackFleet(newSlots),
     );
@@ -812,6 +834,12 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     _soundService.playButtonHaptic();
     _autoSaveDebounced();
     return true;
+  }
+
+  /// Dismisses the contextual Sort micro-tutorial
+  void skipSortTutorial() {
+    state = state.copyWith(hasSeenSortTutorial: true);
+    _autoSaveDebounced();
   }
 
   /// Derives active racing track fleet directly from grid slots (highest tiers first, max 4, ignoring unopened crates)
@@ -1121,17 +1149,15 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     _autoSaveDebounced();
   }
 
-  /// Claims reward from landing on a specific Wormhole Roulette wedge
+  /// Claims reward from landing on a specific Wormhole Roulette wedge (1 Free + 2 Ad Spins per 24h)
   void claimRouletteReward(RouletteRewardModel reward) {
     final now = DateTime.now().millisecondsSinceEpoch;
-    int newExtraSpins = state.extraSpinsCount;
-    int newLastFree = state.lastFreeSpinTimestamp;
-
-    if (newExtraSpins > 0) {
-      newExtraSpins--;
-    } else {
-      newLastFree = now;
-    }
+    final int currentUsed = state.effectiveDailySpinsUsed;
+    final int newUsed = (currentUsed + 1).clamp(0, 3);
+    final int newResetTimestamp = (state.lastDailySpinResetTimestamp == 0 ||
+            (now - state.lastDailySpinResetTimestamp) >= (24 * 60 * 60 * 1000))
+        ? now
+        : state.lastDailySpinResetTimestamp;
 
     final double highestIncome = state.trackShips.isNotEmpty
         ? state.trackShips.first.calculateIncomePayout()
@@ -1144,8 +1170,9 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
         state = state.copyWith(
           credits: state.credits + jackpot,
           lifetimeCredits: state.lifetimeCredits + jackpot,
-          extraSpinsCount: newExtraSpins,
-          lastFreeSpinTimestamp: newLastFree,
+          dailySpinsUsed: newUsed,
+          lastDailySpinResetTimestamp: newResetTimestamp,
+          lastFreeSpinTimestamp: newResetTimestamp,
         );
         break;
 
@@ -1155,8 +1182,9 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
         state = state.copyWith(
           credits: state.credits + windfall,
           lifetimeCredits: state.lifetimeCredits + windfall,
-          extraSpinsCount: newExtraSpins,
-          lastFreeSpinTimestamp: newLastFree,
+          dailySpinsUsed: newUsed,
+          lastDailySpinResetTimestamp: newResetTimestamp,
+          lastFreeSpinTimestamp: newResetTimestamp,
         );
         break;
 
@@ -1164,8 +1192,9 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
         final double dm = reward.count * relicDarkMatterMultiplier;
         state = state.copyWith(
           darkMatter: state.darkMatter + dm,
-          extraSpinsCount: newExtraSpins,
-          lastFreeSpinTimestamp: newLastFree,
+          dailySpinsUsed: newUsed,
+          lastDailySpinResetTimestamp: newResetTimestamp,
+          lastFreeSpinTimestamp: newResetTimestamp,
         );
         break;
 
@@ -1184,25 +1213,27 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
         state = state.copyWith(
           credits: state.credits + warpEarnings,
           lifetimeCredits: state.lifetimeCredits + warpEarnings,
-          extraSpinsCount: newExtraSpins,
-          lastFreeSpinTimestamp: newLastFree,
+          dailySpinsUsed: newUsed,
+          lastDailySpinResetTimestamp: newResetTimestamp,
+          lastFreeSpinTimestamp: newResetTimestamp,
         );
         break;
-
 
       case RouletteRewardType.feverRush:
         state = state.copyWith(
           isFeverActive: true,
           feverTimeRemaining: 30.0,
-          extraSpinsCount: newExtraSpins,
-          lastFreeSpinTimestamp: newLastFree,
+          dailySpinsUsed: newUsed,
+          lastDailySpinResetTimestamp: newResetTimestamp,
+          lastFreeSpinTimestamp: newResetTimestamp,
         );
         break;
 
       case RouletteRewardType.relicShards:
         state = state.copyWith(
-          extraSpinsCount: newExtraSpins,
-          lastFreeSpinTimestamp: newLastFree,
+          dailySpinsUsed: newUsed,
+          lastDailySpinResetTimestamp: newResetTimestamp,
+          lastFreeSpinTimestamp: newResetTimestamp,
         );
         if (state.relics.isNotEmpty) {
           final randomRelic =
@@ -1213,18 +1244,43 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
 
       case RouletteRewardType.shipDrop:
         state = state.copyWith(
-          extraSpinsCount: newExtraSpins,
-          lastFreeSpinTimestamp: newLastFree,
+          dailySpinsUsed: newUsed,
+          lastDailySpinResetTimestamp: newResetTimestamp,
+          lastFreeSpinTimestamp: newResetTimestamp,
         );
-        dropMysteryCargo();
+        final emptyIndex = state.gridSlots.indexWhere((s) => s == null);
+        if (emptyIndex != -1) {
+          final int awardedTier = max(1, state.highestTierUnlocked);
+          final newSlots = List<ShipModel?>.from(state.gridSlots);
+          newSlots[emptyIndex] = ShipModel.create(awardedTier, null, false);
+          state = state.copyWith(
+            gridSlots: newSlots,
+            trackShips: computeTrackFleet(newSlots),
+          );
+        } else {
+          // If grid is full, award 50x lap income compensation!
+          final double fallbackBonus = highestIncome * 50.0 * relicIncomeMultiplier;
+          state = state.copyWith(
+            credits: state.credits + fallbackBonus,
+            lifetimeCredits: state.lifetimeCredits + fallbackBonus,
+          );
+        }
         break;
 
       case RouletteRewardType.mysteryCrate:
         state = state.copyWith(
-          extraSpinsCount: newExtraSpins,
-          lastFreeSpinTimestamp: newLastFree,
+          dailySpinsUsed: newUsed,
+          lastDailySpinResetTimestamp: newResetTimestamp,
+          lastFreeSpinTimestamp: newResetTimestamp,
         );
-        dropMysteryCargo();
+        final bool dropped = dropMysteryCargo();
+        if (!dropped) {
+          final double fallbackBonus = highestIncome * 25.0 * relicIncomeMultiplier;
+          state = state.copyWith(
+            credits: state.credits + fallbackBonus,
+            lifetimeCredits: state.lifetimeCredits + fallbackBonus,
+          );
+        }
         break;
     }
 
@@ -1347,18 +1403,22 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
   }
 
   /// Claims today's reward from the 7-Day Commander Login Calendar
-  bool claimDailyLoginReward({bool doubleWithAd = false}) {
+  bool claimDailyLoginReward({bool doubleWithAd = false, double multiplier = 1.0}) {
     if (!state.canClaimDailyReward) return false;
 
     final int dayIndex = (state.currentLoginDay - 1).clamp(0, 6);
     final reward = DailyRewardDay.schedule[dayIndex];
-    final double multiplier = doubleWithAd ? 2.0 : 1.0;
+    final double effectiveMultiplier =
+        doubleWithAd ? 2.0 : (multiplier > 1.0 ? multiplier : 1.0);
 
     final double addedCredits =
-        reward.creditsReward * multiplier * relicIncomeMultiplier;
-    final double addedDarkMatter = reward.darkMatterReward * multiplier;
-    final int addedShards = (reward.relicShardsReward * multiplier).round();
-    final int addedSpins = (reward.extraSpins * multiplier).round();
+        reward.creditsReward * effectiveMultiplier * relicIncomeMultiplier;
+    final double addedDarkMatter =
+        reward.darkMatterReward * effectiveMultiplier;
+    final int addedShards =
+        (reward.relicShardsReward * effectiveMultiplier).round();
+    final int addedSpins =
+        (reward.extraSpins * effectiveMultiplier).round();
 
     // Advance login streak (loops 1 to 7)
     final int nextDay = (state.currentLoginDay % 7) + 1;
@@ -1480,19 +1540,31 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
       darkMatter: state.darkMatter + 500.0,
       extraSpinsCount: state.extraSpinsCount + 5,
     );
+    StorageService.recordPurchaseReceipt('remove_ads_vip');
     _soundService.playPrestigeSound();
     _autoSaveDebounced();
   }
 
-  /// Restores In-App Purchases (re-enables Remove Ads & Lifetime VIP Drone)
+  /// Restores In-App Purchases from validated receipt ledger
   bool restorePurchases() {
+    final receipts = StorageService.getPurchasedReceipts();
+    if (receipts.isEmpty && !state.hasRemovedAds && !state.isDronePermanent) {
+      // No purchases on record
+      return false;
+    }
+
+    final bool hasVipReceipt =
+        receipts.contains('remove_ads_vip') || state.hasRemovedAds;
+    final bool hasDroneReceipt =
+        receipts.contains('perm_vip_drone') || state.isDronePermanent;
+
     state = state.copyWith(
-      hasRemovedAds: true,
-      isDronePermanent: true,
+      hasRemovedAds: hasVipReceipt,
+      isDronePermanent: hasDroneReceipt,
     );
     _soundService.playPurchaseSound();
     _autoSaveDebounced();
-    return true;
+    return hasVipReceipt || hasDroneReceipt;
   }
 
 

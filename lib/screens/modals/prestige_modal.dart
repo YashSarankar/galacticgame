@@ -194,7 +194,9 @@ class PrestigeModal extends StatelessWidget {
                           AdManager().showRewardedAd(
                             onUserEarnedReward: () {
                               onPrestigeDoubled();
-                              Navigator.of(context).pop();
+                              if (context.mounted) {
+                                Navigator.of(context).pop();
+                              }
                             },
                           );
                         }

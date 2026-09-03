@@ -124,3 +124,89 @@ class RadialShockwaveComponent extends PositionComponent {
     canvas.drawCircle(Offset.zero, currentRadius, ringPaint);
   }
 }
+
+/// Supersonic Warp Speed streaks shooting outward across the track on tap
+class WarpSpeedLinesComponent extends PositionComponent {
+  final Color color;
+  final double duration;
+  final int lineCount;
+  final List<_WarpLine> _lines = [];
+  double _elapsed = 0.0;
+  final Random _rng = Random();
+
+  WarpSpeedLinesComponent({
+    required Vector2 position,
+    this.color = const Color(0xFF00F0FF),
+    this.duration = 0.4,
+    this.lineCount = 18,
+  }) : super(position: position, anchor: Anchor.center);
+
+  @override
+  void onLoad() {
+    super.onLoad();
+    for (int i = 0; i < lineCount; i++) {
+      final double angle = _rng.nextDouble() * 2 * pi;
+      final double speed = 120.0 + _rng.nextDouble() * 240.0;
+      final double length = 20.0 + _rng.nextDouble() * 45.0;
+      final double startDist = 10.0 + _rng.nextDouble() * 30.0;
+      _lines.add(_WarpLine(
+        angle: angle,
+        speed: speed,
+        length: length,
+        dist: startDist,
+        width: 1.5 + _rng.nextDouble() * 2.0,
+      ));
+    }
+  }
+
+  @override
+  void update(double dt) {
+    super.update(dt);
+    _elapsed += dt;
+    for (final line in _lines) {
+      line.dist += line.speed * dt;
+    }
+    if (_elapsed >= duration) {
+      removeFromParent();
+    }
+  }
+
+  @override
+  void render(Canvas canvas) {
+    final double progress = (_elapsed / duration).clamp(0.0, 1.0);
+    final double opacity = (1.0 - progress).clamp(0.0, 1.0);
+
+    for (final line in _lines) {
+      final double x1 = cos(line.angle) * line.dist;
+      final double y1 = sin(line.angle) * line.dist;
+      final double x2 = cos(line.angle) * (line.dist + line.length);
+      final double y2 = sin(line.angle) * (line.dist + line.length);
+
+      final paint = Paint()
+        ..color = color.withAlpha((opacity * 255).round())
+        ..strokeWidth = line.width * (1.0 - progress * 0.4)
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..maskFilter = const MaskFilter.blur(BlurStyle.solid, 2.5);
+
+      canvas.drawLine(Offset(x1, y1), Offset(x2, y2), paint);
+    }
+  }
+}
+
+class _WarpLine {
+  final double angle;
+  final double speed;
+  final double length;
+  double dist;
+  final double width;
+
+  _WarpLine({
+    required this.angle,
+    required this.speed,
+    required this.length,
+    required this.dist,
+    required this.width,
+  });
+}
+

@@ -100,14 +100,20 @@ class AdManager {
       return;
     }
 
+    bool earnedReward = false;
+
     _rewardedAd!.fullScreenContentCallback = FullScreenContentCallback(
       onAdDismissedFullScreenContent: (ad) {
         ad.dispose();
         _rewardedAd = null;
         loadRewardedAd();
+        if (earnedReward) {
+          onUserEarnedReward();
+        }
         onAdClosed?.call();
       },
       onAdFailedToShowFullScreenContent: (ad, error) {
+        debugPrint('[AdManager] Rewarded ad failed to show: $error');
         ad.dispose();
         _rewardedAd = null;
         loadRewardedAd();
@@ -118,7 +124,7 @@ class AdManager {
     _rewardedAd!.show(
       onUserEarnedReward: (ad, reward) {
         debugPrint('[AdManager] User earned reward: ${reward.amount} ${reward.type}');
-        onUserEarnedReward();
+        earnedReward = true;
       },
     );
   }
