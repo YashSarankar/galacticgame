@@ -12,6 +12,7 @@ class ShipModel {
   final double baseIncome;
   final double baseSpeed; // pixels per second along path
   final bool isBox; // Delivery Crate waiting to be tapped to unbox
+  final bool isAdBox; // Premium Golden Gift Box unlocked via Rewarded Video Ad (or VIP)
 
   const ShipModel({
     required this.id,
@@ -22,10 +23,11 @@ class ShipModel {
     required this.baseIncome,
     required this.baseSpeed,
     this.isBox = false,
+    this.isAdBox = false,
   });
 
   /// Factory to generate a ship by tier with a unique instance ID.
-  factory ShipModel.create(int tier, [String? id, bool isBox = false]) {
+  factory ShipModel.create(int tier, [String? id, bool isBox = false, bool isAdBox = false]) {
     final spec = getTierSpec(tier);
     return ShipModel(
       id: id ?? '${spec.tier}_${DateTime.now().microsecondsSinceEpoch}_${Random().nextInt(9999)}',
@@ -36,6 +38,7 @@ class ShipModel {
       baseIncome: spec.baseIncome,
       baseSpeed: spec.baseSpeed,
       isBox: isBox,
+      isAdBox: isAdBox,
     );
   }
 
@@ -65,6 +68,7 @@ class ShipModel {
     double? baseIncome,
     double? baseSpeed,
     bool? isBox,
+    bool? isAdBox,
   }) {
     return ShipModel(
       id: id ?? this.id,
@@ -75,6 +79,7 @@ class ShipModel {
       baseIncome: baseIncome ?? this.baseIncome,
       baseSpeed: baseSpeed ?? this.baseSpeed,
       isBox: isBox ?? this.isBox,
+      isAdBox: isAdBox ?? this.isAdBox,
     );
   }
 
@@ -88,6 +93,7 @@ class ShipModel {
       'baseIncome': baseIncome,
       'baseSpeed': baseSpeed,
       'isBox': isBox,
+      'isAdBox': isAdBox,
     };
   }
 
@@ -101,6 +107,7 @@ class ShipModel {
       baseIncome: (json['baseIncome'] as num).toDouble(),
       baseSpeed: (json['baseSpeed'] as num).toDouble(),
       isBox: json['isBox'] as bool? ?? false,
+      isAdBox: json['isAdBox'] as bool? ?? false,
     );
   }
 

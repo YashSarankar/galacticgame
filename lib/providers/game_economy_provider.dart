@@ -16,8 +16,7 @@ import '../models/career_model.dart';
 import '../services/sound_service.dart';
 import '../services/storage_service.dart';
 import '../services/user_growth_service.dart';
-
-
+import '../services/iap_service.dart';
 
 
 enum DispatchResult {
@@ -34,11 +33,43 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
   void Function(int tier, List<UnlockedFeatureInfo> features)? onFeatureUnlocked;
   int _tutorialTapCount = 0;
 
-  GameEconomyNotifier(super.initialState);
+  GameEconomyNotifier(super.initialState) {
+    _initIap();
+  }
+
+  void _initIap() {
+    final iap = InAppPurchaseService();
+    iap.onVipPurchased = () {
+      purchaseRemoveAds();
+    };
+    iap.onDarkMatterPurchased = (dm) {
+      state = state.copyWith(darkMatter: state.darkMatter + dm);
+      _soundService.playPrestigeSound();
+      _autoSaveDebounced();
+    };
+    iap.onCreditsPurchased = (cr) {
+      state = state.copyWith(
+        credits: state.credits + cr,
+        lifetimeCredits: state.lifetimeCredits + cr,
+      );
+      _soundService.playPurchaseSound();
+      _autoSaveDebounced();
+    };
+  }
 
   /// Load state from persistent storage
   void loadFromState(GameState loadedState) {
-    state = loadedState;
+    state = loadedState.copyWith(
+      lastSaveTimestamp: DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
+  /// Stretches and stamps in-memory save timestamp to current epoch ms to keep offline earnings accurate
+  void stampSaveTimestamp() {
+    state = state.copyWith(
+      lastSaveTimestamp: DateTime.now().millisecondsSinceEpoch,
+    );
+    _autoSaveDebounced();
   }
 
   /// Manually advance tutorial step
@@ -157,13 +188,11 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
 
     // Advance tutorial step 4 (Fleet Speed) -> Step 5 (Completed)
     final int nextTutorial = state.tutorialStep == 4 ? 5 : state.tutorialStep;
-    final double rewardBonus = state.tutorialStep == 4 ? 250.0 : 0.0;
-    final double rewardDM = state.tutorialStep == 4 ? 10.0 : 0.0;
+    final double rewardBonus = state.tutorialStep == 4 ? 500.0 : 0.0;
 
     state = state.copyWith(
       credits: state.credits - cost + rewardBonus,
       lifetimeCredits: state.lifetimeCredits + rewardBonus,
-      darkMatter: state.darkMatter + rewardDM,
       fleetSpeedLevel: state.fleetSpeedLevel + 1,
       tutorialStep: nextTutorial,
     );
@@ -181,13 +210,11 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
 
     // Advance tutorial step 4 (Circuit Laser Gates) -> Step 5 (Completed)
     final int nextTutorial = state.tutorialStep == 4 ? 5 : state.tutorialStep;
-    final double rewardBonus = state.tutorialStep == 4 ? 250.0 : 0.0;
-    final double rewardDM = state.tutorialStep == 4 ? 10.0 : 0.0;
+    final double rewardBonus = state.tutorialStep == 4 ? 500.0 : 0.0;
 
     state = state.copyWith(
       credits: state.credits - cost + rewardBonus,
       lifetimeCredits: state.lifetimeCredits + rewardBonus,
-      darkMatter: state.darkMatter + rewardDM,
       finishLinesCount: state.finishLinesCount + 1,
       tutorialStep: nextTutorial,
     );
@@ -209,6 +236,21 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
       finishLinesCount: 1, // Reset laser gates for the new evolved track
     );
     _soundService.playPrestigeSound();
+    _autoSaveDebounced();
+    return true;
+  }
+
+  /// Installs the next on-track Hyper Boost Pad (Pad 1 or Pad 2, max 2 pads per circuit)
+  bool unlockNextBoostPad() {
+    if (state.isBoostPadCountMaxed) return false;
+    final double? cost = state.nextBoostPadInstallCost;
+    if (cost == null || state.credits < cost) return false;
+
+    state = state.copyWith(
+      credits: state.credits - cost,
+      boostPadCount: state.boostPadCount + 1,
+    );
+    _soundService.playPurchaseSound();
     _autoSaveDebounced();
     return true;
   }
@@ -317,13 +359,13 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     }
   }
 
-  /// Activates 12-second Hyperspace Nitro Overdrive (3.0x speed and coin stream)
+  /// Activates 5-second Hyperspace Nitro Overdrive (2.0x speed boost and coin stream)
   bool activateNitroOverdrive() {
     if (state.nitroCharge < 0.99 || state.isNitroActive) return false;
 
     state = state.copyWith(
       isNitroActive: true,
-      nitroSecondsRemaining: 12.0,
+      nitroSecondsRemaining: 5.0,
       nitroCharge: 0.0,
     );
 
@@ -437,9 +479,36 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     return max(techBase, milestoneTier);
   }
 
+  /// Calculates dynamic cost to purchase the next spaceship
+  double get nextShipBuyCost {
+    final discountSkill = state.career.skills.firstWhere(
+      (s) => s.effectType == SkillEffectType.shipDiscount,
+      orElse: () => const SkillNodeModel(
+        id: '',
+        title: '',
+        description: '',
+        iconAsset: '',
+        effectType: SkillEffectType.shipDiscount,
+        level: 0,
+        maxLevel: 8,
+        baseCost: 0,
+        costMultiplier: 1,
+        valuePerLevel: 0.05,
+      ),
+    );
+    final int dropTier = activeStoreBuyTier;
+    final double rawCost = ShipModel.calculatePurchaseCost(
+      state.totalShipsPurchased,
+      dropTier,
+      discount: discountSkill.currentBonusValue,
+    );
+    return state.tutorialStep == 2 ? min(rawCost, max(10.0, state.credits)) : rawCost;
+  }
+
   /// Spawns a mystery cosmic supply crate directly onto an empty grid slot (waiting to be tapped!)
-  bool dropMysteryCargo({int? tier}) {
-    // Prevent crate clutter: Max 1 unopened crate on grid at a time
+  /// Keeps exactly 1 crate on the grid at a time to keep merge deck clean and prevent clutter.
+  bool dropMysteryCargo({int? tier, bool? isAdBox}) {
+    // Only 1 unopened crate on the grid at a time
     final int existingCrates =
         state.gridSlots.where((s) => s != null && s.isBox).length;
     if (existingCrates >= 1) return false;
@@ -456,18 +525,23 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     final random = Random();
     final int targetSlot = emptyIndices[random.nextInt(emptyIndices.length)];
 
+    // 50% chance of being an Ad Crate for players who unlocked Tier 2+
+    final bool isAdCrate = isAdBox ??
+        (state.highestTierUnlocked >= 2 && random.nextBool());
+
     final int awardedTier;
     if (tier != null && tier > 0) {
       awardedTier = tier.clamp(1, 50);
     } else {
       final int minTier = activeStoreBuyTier;
-      final int maxTier = max(minTier, state.highestTierUnlocked);
-      awardedTier = minTier + random.nextInt(maxTier - minTier + 1);
+      final int bonusBoost = isAdCrate ? 1 : 0;
+      final int maxTier = max(minTier, state.highestTierUnlocked + bonusBoost);
+      awardedTier = min(50, minTier + random.nextInt(maxTier - minTier + 1));
     }
 
     final newSlots = List<ShipModel?>.from(state.gridSlots);
     newSlots[targetSlot] =
-        ShipModel.create(awardedTier, null, true); // isBox: true!
+        ShipModel.create(awardedTier, null, true, isAdCrate); // isBox: true, isAdBox: isAdCrate!
 
     state = state.copyWith(
       gridSlots: newSlots,
@@ -525,7 +599,8 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
 
   /// Awards bonus credits / DM when player shatters an asteroid hazard
   void recordAsteroidShattered({bool isDarkMatter = false, double rewardCredits = 50.0}) {
-    if (isDarkMatter) {
+    final bool canEarnDM = state.highestTierUnlocked >= 3;
+    if (isDarkMatter && canEarnDM) {
       state = state.copyWith(darkMatter: state.darkMatter + 1.0);
     } else {
       state = state.copyWith(
@@ -686,7 +761,14 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
   }
 
 
-  /// Automatically merges all available pairs on the flight deck with one tap
+  /// Recycles the lowest tier ship on the grid to instantly resolve grid deadlock
+  double recycleLowestTierShip() {
+    final int? lowestIndex = state.lowestTierSlotIndex;
+    if (lowestIndex == null) return 0.0;
+    return recycleShip(lowestIndex);
+  }
+
+  /// Automatically merges all available pairs on the flight deck with one tap and compacts the grid
   int autoMergeGrid() {
     final int unlockedLimit = maxUnlockedGridSlots;
     final newSlots = List<ShipModel?>.from(state.gridSlots);
@@ -720,9 +802,36 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
 
     if (totalMergesMade > 0) {
       final int prevHighest = state.highestTierUnlocked;
+
+      // Automatically compact & sort remaining ships to eliminate empty holes
+      final List<ShipModel> ships = [];
+      final List<ShipModel> crates = [];
+      for (int i = 0; i < unlockedLimit; i++) {
+        final item = newSlots[i];
+        if (item != null) {
+          if (item.isBox) {
+            crates.add(item);
+          } else {
+            ships.add(item);
+          }
+        }
+      }
+      ships.sort((a, b) => a.tier.compareTo(b.tier));
+      final List<ShipModel?> compactedSlots = List<ShipModel?>.filled(16, null);
+      int cursor = 0;
+      for (final ship in ships) {
+        if (cursor < unlockedLimit) compactedSlots[cursor++] = ship;
+      }
+      for (final crate in crates) {
+        if (cursor < unlockedLimit) compactedSlots[cursor++] = crate;
+      }
+      for (int i = unlockedLimit; i < 16; i++) {
+        compactedSlots[i] = newSlots[i];
+      }
+
       state = state.copyWith(
-        gridSlots: newSlots,
-        trackShips: computeTrackFleet(newSlots),
+        gridSlots: compactedSlots,
+        trackShips: computeTrackFleet(compactedSlots),
         totalMergesCount: state.totalMergesCount + totalMergesMade,
         highestTierUnlocked: newHighest,
         comboCount: 0,
@@ -781,13 +890,11 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
       newSlots[i] = state.gridSlots[i];
     }
 
-    final double bonusCredits = !state.hasSeenSortTutorial ? 50.0 : 0.0;
-    final double bonusDM = !state.hasSeenSortTutorial ? 5.0 : 0.0;
+    final double bonusCredits = !state.hasSeenSortTutorial ? 100.0 : 0.0;
 
     state = state.copyWith(
       credits: state.credits + bonusCredits,
       lifetimeCredits: state.lifetimeCredits + bonusCredits,
-      darkMatter: state.darkMatter + bonusDM,
       hasSeenSortTutorial: true,
       gridSlots: newSlots,
       trackShips: computeTrackFleet(newSlots),
@@ -796,6 +903,17 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     _soundService.playButtonHaptic();
     _autoSaveDebounced();
     return true;
+  }
+
+  /// Celebratory intro completion for Dark Matter discovery at Tier 3
+  void acknowledgeDarkMatterIntro() {
+    if (state.hasSeenDarkMatterIntro) return;
+    state = state.copyWith(
+      hasSeenDarkMatterIntro: true,
+      darkMatter: state.darkMatter + 15.0, // Starter Dark Matter grant
+    );
+    _soundService.playPrestigeSound();
+    _autoSaveDebounced();
   }
 
   /// Dismisses the contextual Sort micro-tutorial
@@ -918,6 +1036,7 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     state = state.copyWith(
       credits: state.credits + finalCoins,
       lifetimeCredits: state.lifetimeCredits + finalCoins,
+      lastSaveTimestamp: DateTime.now().millisecondsSinceEpoch,
     );
     _soundService.playPurchaseSound();
     _autoSaveDebounced();
@@ -935,6 +1054,7 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     final newBoss = BossModel.createForSector(
       sectorLevel: state.career.sectorLevel,
       highestTierUnlocked: state.highestTierUnlocked,
+      totalBossesDefeated: state.career.totalBossesDefeated,
       baseIncomePerLap: highestIncome,
     );
 
@@ -1075,7 +1195,13 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
       // Boss escaped
       state = state.copyWith(clearActiveBoss: true);
     } else {
-      state = state.copyWith(activeBoss: boss.copyWith(timeRemaining: newTime));
+      // Kinetic Energy Shield slowly regenerates over time
+      final double regenAmount =
+          (boss.archetype == BossArchetype.shieldedTitan ? 4.0 : 2.0) * dt;
+      final updatedBoss = boss
+          .regenerateShield(regenAmount)
+          .copyWith(timeRemaining: newTime);
+      state = state.copyWith(activeBoss: updatedBoss);
     }
   }
 
@@ -1086,11 +1212,15 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
 
     final double rewardCoins = boss.bountyCredits;
     final double rewardDm = boss.bountyDarkMatter * relicDarkMatterMultiplier;
+    final int updatedBossCount = state.career.totalBossesDefeated + 1;
+    final updatedCareer =
+        state.career.copyWith(totalBossesDefeated: updatedBossCount);
 
     state = state.copyWith(
       credits: state.credits + rewardCoins,
       lifetimeCredits: state.lifetimeCredits + rewardCoins,
       darkMatter: state.darkMatter + rewardDm,
+      career: updatedCareer,
       clearActiveBoss: true,
     );
 
@@ -1106,6 +1236,7 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     // Award 1 extra lucky spin for defeating an alien dreadnought!
     addExtraSpin(count: 1);
 
+    _evaluateAchievements();
     _soundService.playPrestigeSound();
     _autoSaveDebounced();
   }
@@ -1495,11 +1626,25 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
           unlockedPermanentBoosters: updatedBoosters,
         );
         break;
+
+      case StoreCategory.iapVault:
+        // In-App purchases are handled via InAppPurchaseService
+        break;
     }
 
     _soundService.playPurchaseSound();
     _autoSaveDebounced();
     return true;
+  }
+
+  /// Grants free temporary VIP Auto-Collector Drone rental (from Rewarded Video or bonus drops)
+  void grantTempDroneRental({int durationMinutes = 30}) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final int currentBase = max(now, state.droneRentalExpiryEpoch);
+    final int newExpiry = currentBase + (durationMinutes * 60 * 1000);
+    state = state.copyWith(droneRentalExpiryEpoch: newExpiry);
+    _soundService.playPurchaseSound();
+    _autoSaveDebounced();
   }
 
   /// Purchases permanent VIP Commander Pass (+500 Dark Matter, +5 Spins & Lifetime Drone)

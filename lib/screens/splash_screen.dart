@@ -4,8 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:lottie/lottie.dart';
 import 'main_game_screen.dart';
 
-/// Delightful, ultra-cute space tycoon splash screen with floating Commander Panda,
-/// twinkling cosmic stars, cute loading telemetry, and automatic smooth transition.
+/// Ultra-clean, professional aerospace splash screen with pristine white background,
+/// glowing orbital rings, floating flagship starship, and smooth telemetry loading.
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -15,46 +15,40 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
-  late final AnimationController _pulseController;
   late final AnimationController _floatController;
+  late final AnimationController _pulseController;
+  late final AnimationController _orbitController;
   late final AnimationController _progressController;
   late final Animation<double> _progressAnimation;
 
-  final List<_TwinkleStar> _stars = [];
-  String _telemetryText = '🚀 Powering up cute starships...';
+  String _telemetryText = 'Initializing orbital telemetry...';
 
   @override
   void initState() {
     super.initState();
 
-    // Generate random twinkling stars
-    final rng = Random();
-    for (int i = 0; i < 30; i++) {
-      _stars.add(_TwinkleStar(
-        x: rng.nextDouble(),
-        y: rng.nextDouble(),
-        size: 1.5 + rng.nextDouble() * 2.5,
-        twinkleSpeed: 0.8 + rng.nextDouble() * 1.5,
-        phase: rng.nextDouble() * 2 * pi,
-      ));
-    }
-
-    // Gentle holographic pulse
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1600),
-    )..repeat(reverse: true);
-
-    // Cute bobbing / floating animation for Panda
+    // Floating levitation animation for the flagship
     _floatController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2000),
+      duration: const Duration(milliseconds: 2200),
     )..repeat(reverse: true);
 
-    // Progress Controller (Smooth automatic loading)
+    // Subtle breathing pulse for halo
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat(reverse: true);
+
+    // Orbital ring continuous rotation
+    _orbitController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 12),
+    )..repeat();
+
+    // Progress Controller (Smooth 2.2s loading sequence)
     _progressController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2000),
+      duration: const Duration(milliseconds: 2200),
     );
 
     _progressAnimation = CurvedAnimation(
@@ -65,14 +59,14 @@ class _SplashScreenState extends State<SplashScreen>
     _progressController.addListener(() {
       final val = _progressAnimation.value;
       String newText;
-      if (val >= 0.85) {
+      if (val >= 0.88) {
         newText = '🐼 Commander Panda is ready! Launching...';
-      } else if (val >= 0.55) {
-        newText = '🎋 Feeding Commander Panda bamboo snacks...';
-      } else if (val >= 0.25) {
-        newText = '✨ Polishing laser gates & boost pads...';
+      } else if (val >= 0.60) {
+        newText = '🎋 Calibrating orbital laser gates & telemetry...';
+      } else if (val >= 0.30) {
+        newText = '🚀 Powering up starships & dark matter matrix...';
       } else {
-        newText = '🚀 Powering up cute starships...';
+        newText = '✨ Initializing Galactic Merge...';
       }
       if (newText != _telemetryText) {
         setState(() {
@@ -94,7 +88,7 @@ class _SplashScreenState extends State<SplashScreen>
     HapticFeedback.lightImpact();
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
-        transitionDuration: const Duration(milliseconds: 550),
+        transitionDuration: const Duration(milliseconds: 600),
         pageBuilder: (context, animation, secondaryAnimation) =>
             const MainGameScreen(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
@@ -112,8 +106,9 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   void dispose() {
-    _pulseController.dispose();
     _floatController.dispose();
+    _pulseController.dispose();
+    _orbitController.dispose();
     _progressController.dispose();
     super.dispose();
   }
@@ -122,178 +117,259 @@ class _SplashScreenState extends State<SplashScreen>
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF04060E),
-      body: Stack(
-        children: [
-          // 1. Twinkling Cosmic Stars Background
-          Positioned.fill(
-            child: AnimatedBuilder(
-              animation: _pulseController,
-              builder: (context, _) {
-                return CustomPaint(
-                  painter: _StarfieldPainter(
-                    stars: _stars,
-                    animationValue: _pulseController.value,
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.dark.copyWith(
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor: const Color(0xFFF8FAFC),
+        systemNavigationBarIconBrightness: Brightness.dark,
+      ),
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFFFFFF),
+        body: Stack(
+          alignment: Alignment.center,
+          children: [
+            // 1. Subtle Ambient Studio Glows
+            Positioned(
+              top: -size.height * 0.1,
+              child: Container(
+                width: size.width * 1.4,
+                height: size.height * 0.5,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      const Color(0xFF00F0FF).withAlpha((0.08 * 255).round()),
+                      const Color(0xFF4F46E5).withAlpha((0.04 * 255).round()),
+                      Colors.transparent,
+                    ],
+                    stops: const [0.0, 0.5, 1.0],
                   ),
-                );
-              },
-            ),
-          ),
-
-          // 2. Ambient Pastel Nebula Glow
-          Positioned(
-            top: size.height * 0.18,
-            left: size.width * 0.1,
-            child: Container(
-              width: size.width * 0.8,
-              height: size.width * 0.8,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    const Color(0xFFBD00FF).withAlpha((0.20 * 255).round()),
-                    const Color(0xFF00F0FF).withAlpha((0.10 * 255).round()),
-                    Colors.transparent,
-                  ],
-                  stops: const [0.0, 0.5, 1.0],
                 ),
               ),
             ),
-          ),
+            Positioned(
+              bottom: -size.height * 0.1,
+              child: Container(
+                width: size.width * 1.4,
+                height: size.height * 0.45,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      const Color(0xFFBD00FF).withAlpha((0.05 * 255).round()),
+                      const Color(0xFF00F0FF).withAlpha((0.02 * 255).round()),
+                      Colors.transparent,
+                    ],
+                    stops: const [0.0, 0.5, 1.0],
+                  ),
+                ),
+              ),
+            ),
 
-          // 3. Main Center Content
-          SafeArea(
-            child: Center(
+            // 2. Background Orbital Grid Pattern
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _CosmicGridPainter(
+                  pulseValue: _pulseController.value,
+                  orbitAngle: _orbitController.value * 2 * pi,
+                ),
+              ),
+            ),
+
+            // 3. Main Center Content
+            SafeArea(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                padding: const EdgeInsets.symmetric(horizontal: 28.0),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Spacer(flex: 2),
+                    const Spacer(flex: 3),
 
-                    // Game Title with Neon Gradient Glow
-                    AnimatedBuilder(
-                      animation: _pulseController,
-                      builder: (context, child) {
-                        return Column(
-                          children: [
-                            ShaderMask(
-                              shaderCallback: (bounds) => const LinearGradient(
-                                colors: [
-                                  Color(0xFF00F0FF),
-                                  Color(0xFFFFD700),
-                                  Color(0xFFFF70A6),
-                                ],
-                              ).createShader(bounds),
-                              child: const Text(
-                                'GALACTIC MERGE',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 30,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 3.5,
-                                ),
-                              ),
+                    // Top Brand Header
+                    Column(
+                      children: [
+                        // Subtitle Badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: const Color(0xFFCBD5E1),
+                              width: 1.0,
                             ),
-                            const SizedBox(height: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 4,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withAlpha((0.03 * 255).round()),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
                               ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFFD700).withAlpha((0.15 * 255).round()),
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: const Color(0xFFFFD700).withAlpha(180),
-                                  width: 1.0,
-                                ),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text('⭐', style: TextStyle(fontSize: 10)),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'IDLE SPACE TYCOON',
-                                    style: TextStyle(
-                                      color: Color(0xFFFFD700),
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w900,
-                                      letterSpacing: 2.0,
-                                    ),
-                                  ),
-                                  SizedBox(width: 4),
-                                  Text('⭐', style: TextStyle(fontSize: 10)),
-                                ],
-                              ),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-
-                    const Spacer(flex: 1),
-
-                    // Cute Floating Panda Commander in Holographic Portal
-                    AnimatedBuilder(
-                      animation: _floatController,
-                      builder: (context, child) {
-                        final floatOffset = sin(_floatController.value * pi) * 8.0;
-                        return Transform.translate(
-                          offset: Offset(0, -floatOffset),
-                          child: Stack(
-                            alignment: Alignment.center,
+                            ],
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              // Glowing Portal Ring
-                              Container(
-                                width: 210,
-                                height: 210,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: const Color(0xFF00F0FF).withAlpha(
-                                      ((0.35 + _pulseController.value * 0.35) * 255).round(),
-                                    ),
-                                    width: 2.0,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(0xFFBD00FF).withAlpha(
-                                        ((0.20 + _pulseController.value * 0.20) * 255).round(),
-                                      ),
-                                      blurRadius: 30.0,
-                                      spreadRadius: 6.0,
-                                    ),
-                                  ],
-                                ),
+                              Icon(
+                                Icons.rocket_launch_rounded,
+                                size: 12,
+                                color: Color(0xFF0284C7),
                               ),
-
-                              // Lottie Cute Panda Animation
-                              SizedBox(
-                                width: 190,
-                                height: 190,
-                                child: Lottie.asset(
-                                  'assets/lottie/panda_gamer.json',
-                                  fit: BoxFit.contain,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return Lottie.asset(
-                                      'assets/Cute Panda Playing Game.json',
-                                      fit: BoxFit.contain,
-                                      errorBuilder: (ctx, err, st) {
-                                        return const Icon(
-                                          Icons.rocket_launch_rounded,
-                                          color: Color(0xFF00F0FF),
-                                          size: 72,
-                                        );
-                                      },
-                                    );
-                                  },
+                              SizedBox(width: 6),
+                              Text(
+                                'NEXT-GEN IDLE TYCOON',
+                                style: TextStyle(
+                                  color: Color(0xFF0F172A),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 2.0,
                                 ),
                               ),
                             ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Title with Clean Obsidian Gradient
+                        ShaderMask(
+                          shaderCallback: (bounds) => const LinearGradient(
+                            colors: [
+                              Color(0xFF0F172A),
+                              Color(0xFF1E293B),
+                              Color(0xFF0284C7),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ).createShader(bounds),
+                          child: const Text(
+                            'GALACTIC MERGE',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 32,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 2.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const Spacer(flex: 2),
+
+                    // Flagship Centerpiece inside Aerospace Halo Ring
+                    AnimatedBuilder(
+                      animation: Listenable.merge([_floatController, _pulseController, _orbitController]),
+                      builder: (context, _) {
+                        final floatY = sin(_floatController.value * pi) * 9.0;
+                        final pulse = _pulseController.value;
+
+                        return Transform.translate(
+                          offset: Offset(0, -floatY),
+                          child: SizedBox(
+                            width: 200,
+                            height: 200,
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                // Outer Ambient Halo Glow
+                                Container(
+                                  width: 180,
+                                  height: 180,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: RadialGradient(
+                                      colors: [
+                                        const Color(0xFF00F0FF).withAlpha(((0.18 + pulse * 0.12) * 255).round()),
+                                        const Color(0xFF4F46E5).withAlpha(((0.08 + pulse * 0.06) * 255).round()),
+                                        Colors.transparent,
+                                      ],
+                                      stops: const [0.0, 0.6, 1.0],
+                                    ),
+                                  ),
+                                ),
+
+                                // Elevated Aerospace Glass Card with Animated Panda
+                                Container(
+                                  width: 155,
+                                  height: 155,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: const Color(0xFFFFFFFF),
+                                    border: Border.all(
+                                      color: const Color(0xFFE2E8F0),
+                                      width: 1.5,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(0xFF0F172A).withAlpha((0.08 * 255).round()),
+                                        blurRadius: 28,
+                                        offset: const Offset(0, 12),
+                                        spreadRadius: 2,
+                                      ),
+                                      BoxShadow(
+                                        color: const Color(0xFF00F0FF).withAlpha((0.15 * 255).round()),
+                                        blurRadius: 20,
+                                        spreadRadius: 1,
+                                      ),
+                                    ],
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: ClipOval(
+                                    child: Lottie.asset(
+                                      'assets/lottie/panda_gamer.json',
+                                      width: 135,
+                                      height: 135,
+                                      fit: BoxFit.contain,
+                                      errorBuilder: (ctx, err, st) {
+                                        return Lottie.asset(
+                                          'assets/Cute Panda Playing Game.json',
+                                          width: 135,
+                                          height: 135,
+                                          fit: BoxFit.contain,
+                                          errorBuilder: (c, e, s) => Image.asset(
+                                            'assets/icon/splash_logo.png',
+                                            width: 88,
+                                            height: 88,
+                                            fit: BoxFit.contain,
+                                            errorBuilder: (cx, er, st2) => const Icon(
+                                              Icons.rocket_launch_rounded,
+                                              size: 64,
+                                              color: Color(0xFF0284C7),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ),
+
+                                // Orbiting Satellite Beacon
+                                Transform.rotate(
+                                  angle: _orbitController.value * 2 * pi,
+                                  child: Align(
+                                    alignment: Alignment.topCenter,
+                                    child: Container(
+                                      width: 10,
+                                      height: 10,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: const Color(0xFF0284C7),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: const Color(0xFF0284C7).withAlpha((0.6 * 255).round()),
+                                            blurRadius: 8,
+                                            spreadRadius: 1.5,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         );
                       },
@@ -301,48 +377,38 @@ class _SplashScreenState extends State<SplashScreen>
 
                     const Spacer(flex: 2),
 
-                    // Cute Telemetry Loading Status
+                    // Dynamic Telemetry Status
                     AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 250),
+                      duration: const Duration(milliseconds: 220),
                       child: Text(
                         _telemetryText,
                         key: ValueKey(_telemetryText),
                         textAlign: TextAlign.center,
                         style: const TextStyle(
-                          color: Color(0xFF00F0FF),
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.8,
+                          color: Color(0xFF475569),
+                          fontSize: 12.0,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.3,
                         ),
                       ),
                     ),
                     const SizedBox(height: 14),
 
-                    // Smooth Holographic Progress Bar Capsule with Glow
+                    // Modern Precision Progress Bar
                     AnimatedBuilder(
                       animation: _progressAnimation,
-                      builder: (context, child) {
+                      builder: (context, _) {
                         final progress = _progressAnimation.value.clamp(0.0, 1.0);
-                        final barWidth = size.width * 0.70;
+                        final barWidth = size.width * 0.72;
 
                         return Column(
                           children: [
                             Container(
                               width: barWidth,
-                              height: 10,
+                              height: 8,
                               decoration: BoxDecoration(
-                                color: const Color(0xFF0C132B),
+                                color: const Color(0xFFE2E8F0),
                                 borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: const Color(0xFF00F0FF).withAlpha(90),
-                                  width: 1.0,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFF00F0FF).withAlpha(25),
-                                    blurRadius: 8.0,
-                                  ),
-                                ],
                               ),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(10),
@@ -352,14 +418,21 @@ class _SplashScreenState extends State<SplashScreen>
                                       alignment: Alignment.centerLeft,
                                       child: Container(
                                         width: barWidth * progress,
-                                        decoration: const BoxDecoration(
-                                          gradient: LinearGradient(
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(10),
+                                          gradient: const LinearGradient(
                                             colors: [
-                                              Color(0xFFBD00FF),
+                                              Color(0xFF0284C7),
+                                              Color(0xFF4F46E5),
                                               Color(0xFF00F0FF),
-                                              Color(0xFFFFD700),
                                             ],
                                           ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: const Color(0xFF0284C7).withAlpha(100),
+                                              blurRadius: 6,
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ),
@@ -367,14 +440,14 @@ class _SplashScreenState extends State<SplashScreen>
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 10),
                             Text(
                               '${(progress * 100).toInt()}%',
                               style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 1.2,
+                                color: Color(0xFF0F172A),
+                                fontSize: 12.0,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.5,
                               ),
                             ),
                           ],
@@ -382,59 +455,57 @@ class _SplashScreenState extends State<SplashScreen>
                       },
                     ),
 
-                    const Spacer(flex: 1),
-                    const SizedBox(height: 18),
+                    const Spacer(flex: 3),
+
+                    // Footer Aerospace Signature
+                    const Text(
+                      'FLAME ENGINE • 60 FPS ORBITAL PHYSICS',
+                      style: TextStyle(
+                        color: Color(0xFF94A3B8),
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                   ],
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
-class _TwinkleStar {
-  final double x;
-  final double y;
-  final double size;
-  final double twinkleSpeed;
-  final double phase;
+/// Custom painter rendering delicate orbital geometric curves
+class _CosmicGridPainter extends CustomPainter {
+  final double pulseValue;
+  final double orbitAngle;
 
-  _TwinkleStar({
-    required this.x,
-    required this.y,
-    required this.size,
-    required this.twinkleSpeed,
-    required this.phase,
-  });
-}
-
-class _StarfieldPainter extends CustomPainter {
-  final List<_TwinkleStar> stars;
-  final double animationValue;
-
-  _StarfieldPainter({required this.stars, required this.animationValue});
+  _CosmicGridPainter({required this.pulseValue, required this.orbitAngle});
 
   @override
   void paint(Canvas canvas, Size size) {
-    for (final star in stars) {
-      final double twinkle = (sin(animationValue * 2 * pi * star.twinkleSpeed + star.phase) + 1.0) / 2.0;
-      final double opacity = (0.25 + twinkle * 0.75).clamp(0.0, 1.0);
+    final center = Offset(size.width / 2, size.height * 0.46);
 
-      final paint = Paint()
-        ..color = Colors.white.withAlpha((opacity * 255).round())
-        ..style = PaintingStyle.fill;
+    final linePaint = Paint()
+      ..color = const Color(0xFF0284C7).withAlpha((0.06 * 255).round())
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
 
-      canvas.drawCircle(
-        Offset(star.x * size.width, star.y * size.height),
-        star.size * (0.8 + twinkle * 0.4),
-        paint,
-      );
-    }
+    final dashPaint = Paint()
+      ..color = const Color(0xFF64748B).withAlpha((0.10 * 255).round())
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+
+    // Concentric orbital guidance rings
+    canvas.drawCircle(center, 95.0, linePaint);
+    canvas.drawCircle(center, 140.0, dashPaint);
+    canvas.drawCircle(center, 190.0, linePaint);
   }
 
   @override
-  bool shouldRepaint(covariant _StarfieldPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _CosmicGridPainter oldDelegate) => true;
 }

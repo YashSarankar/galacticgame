@@ -5,6 +5,7 @@ import 'boss_model.dart';
 import 'relic_model.dart';
 import 'expedition_model.dart';
 import 'achievement_model.dart';
+import 'skill_node_model.dart';
 
 /// Complete persistent state of the Galactic Merge Idle game.
 class GameState {
@@ -84,18 +85,22 @@ class GameState {
     this.fleetSpeedLevel = 1,
     this.finishLinesCount = 1,
     this.circuitTier = 1,
+    this.boostPadCount = 0,
     this.boostPadLevel = 1,
     this.claimedLearningMilestones = const [],
     this.hasSeenSortTutorial = false,
+    this.hasSeenDarkMatterIntro = false,
     required this.career,
   });
 
   final int fleetSpeedLevel;
   final int finishLinesCount;
   final int circuitTier;
+  final int boostPadCount;
   final int boostPadLevel;
   final List<int> claimedLearningMilestones;
   final bool hasSeenSortTutorial;
+  final bool hasSeenDarkMatterIntro;
 
   /// Detects whether active ships on the grid are scattered out of order (for contextual sort tutorial)
   bool get isGridUnsorted {
@@ -109,6 +114,20 @@ class GameState {
     return false;
   }
 
+  /// Whether the circuit has installed the maximum 2 on-track boost pads
+  bool get isBoostPadCountMaxed => boostPadCount >= 2;
+
+  /// Cost to install the next on-track boost pad (Pad 1: 1.5K, Pad 2: 8K, Max: null)
+  double? get nextBoostPadInstallCost {
+    switch (boostPadCount) {
+      case 0:
+        return 1500.0;
+      case 1:
+        return 8000.0;
+      default:
+        return null;
+    }
+  }
 
   /// Velocity impulse multiplier applied when crossing an on-track Hyper Boost Pad (+15% per level)
   double get boostPadMultiplier => 1.50 + (boostPadLevel - 1) * 0.15;
@@ -255,9 +274,83 @@ class GameState {
   double get permanentIncomeMultiplier =>
       unlockedPermanentBoosters.contains('perm_quantum_overdrive') ? 1.50 : 1.0;
 
-  /// Permanent Ship Speed Multiplier from Store purchases
-  double get permanentSpeedMultiplier =>
-      unlockedPermanentBoosters.contains('perm_sublight_thrusters') ? 1.25 : 1.0;
+  /// Permanent Ship Speed Multiplier from Tech Matrix and Store purchases
+  double get permanentSpeedMultiplier {
+    final speedSkill = career.skills.firstWhere(
+      (s) => s.effectType == SkillEffectType.trackSpeedBoost,
+      orElse: () => const SkillNodeModel(
+        id: '',
+        title: '',
+        description: '',
+        iconAsset: '',
+        effectType: SkillEffectType.trackSpeedBoost,
+        level: 0,
+        maxLevel: 10,
+        baseCost: 0,
+        costMultiplier: 1,
+        valuePerLevel: 0.10,
+      ),
+    );
+    final double skillBonus = speedSkill.currentBonusValue;
+    final double storeBonus =
+        unlockedPermanentBoosters.contains('perm_sublight_thrusters') ? 0.25 : 0.0;
+    return 1.0 + skillBonus + storeBonus;
+  }
+
+  /// Number of occupied slots in the grid
+  int get occupiedSlotsCount => gridSlots.where((s) => s != null).length;
+
+  /// Checks if all unlocked slots are filled
+  bool isGridFull(int maxUnlockedSlots) {
+    int count = 0;
+    for (int i = 0; i < maxUnlockedSlots && i < gridSlots.length; i++) {
+      if (gridSlots[i] != null) count++;
+    }
+    return count >= maxUnlockedSlots;
+  }
+
+  /// Checks if any two non-box ships on the grid have the same tier (can merge)
+  bool hasMergeablePair(int maxUnlockedSlots) {
+    final seenTiers = <int>{};
+    for (int i = 0; i < maxUnlockedSlots && i < gridSlots.length; i++) {
+      final ship = gridSlots[i];
+      if (ship != null && !ship.isBox) {
+        if (seenTiers.contains(ship.tier)) {
+          return true;
+        }
+        seenTiers.add(ship.tier);
+      }
+    }
+    return false;
+  }
+
+  /// Returns true if grid is 100% full and there are zero matching pairs to merge
+  bool isGridDeadlocked(int maxUnlockedSlots) {
+    return isGridFull(maxUnlockedSlots) && !hasMergeablePair(maxUnlockedSlots);
+  }
+
+  /// Returns the lowest tier ship slot index on the active grid (for quick recycling/clear)
+  int? get lowestTierSlotIndex {
+    int? lowestIndex;
+    int lowestTier = 999;
+    for (int i = 0; i < gridSlots.length; i++) {
+      final ship = gridSlots[i];
+      if (ship != null && !ship.isBox) {
+        if (ship.tier < lowestTier) {
+          lowestTier = ship.tier;
+          lowestIndex = i;
+        }
+      }
+    }
+    return lowestIndex;
+  }
+
+  /// Returns the lowest tier value currently on the active grid
+  int? get lowestTierOnGrid {
+    final idx = lowestTierSlotIndex;
+    if (idx == null) return null;
+    return gridSlots[idx]?.tier;
+  }
 
   /// Number of completed expeditions ready for bounty collection
   int get readyExpeditionsCount =>
@@ -274,9 +367,9 @@ class GameState {
     slots[0] = ShipModel.create(1);
 
     return GameState(
-      credits: 999999999999.0, // Infinite testing funds
-      lifetimeCredits: 999999999999.0,
-      darkMatter: 999999.0, // Infinite testing Dark Matter
+      credits: 0.0,
+      lifetimeCredits: 0.0,
+      darkMatter: 0.0,
       totalShipsPurchased: 0,
       totalMergesCount: 0,
       totalLineCrossings: 0,
@@ -304,6 +397,7 @@ class GameState {
       fleetSpeedLevel: 1,
       finishLinesCount: 1,
       circuitTier: 1,
+      boostPadCount: 0,
       boostPadLevel: 1,
       claimedLearningMilestones: const [],
       gridSlots: slots,
@@ -361,9 +455,11 @@ class GameState {
     int? fleetSpeedLevel,
     int? finishLinesCount,
     int? circuitTier,
+    int? boostPadCount,
     int? boostPadLevel,
     List<int>? claimedLearningMilestones,
     bool? hasSeenSortTutorial,
+    bool? hasSeenDarkMatterIntro,
     CareerModel? career,
   }) {
     return GameState(
@@ -411,10 +507,13 @@ class GameState {
       fleetSpeedLevel: fleetSpeedLevel ?? this.fleetSpeedLevel,
       finishLinesCount: finishLinesCount ?? this.finishLinesCount,
       circuitTier: circuitTier ?? this.circuitTier,
+      boostPadCount: boostPadCount ?? this.boostPadCount,
       boostPadLevel: boostPadLevel ?? this.boostPadLevel,
       claimedLearningMilestones:
           claimedLearningMilestones ?? this.claimedLearningMilestones,
       hasSeenSortTutorial: hasSeenSortTutorial ?? this.hasSeenSortTutorial,
+      hasSeenDarkMatterIntro:
+          hasSeenDarkMatterIntro ?? this.hasSeenDarkMatterIntro,
       career: career ?? this.career,
     );
   }
@@ -450,9 +549,11 @@ class GameState {
       'fleetSpeedLevel': fleetSpeedLevel,
       'finishLinesCount': finishLinesCount,
       'circuitTier': circuitTier,
+      'boostPadCount': boostPadCount,
       'boostPadLevel': boostPadLevel,
       'claimedLearningMilestones': claimedLearningMilestones,
       'hasSeenSortTutorial': hasSeenSortTutorial,
+      'hasSeenDarkMatterIntro': hasSeenDarkMatterIntro,
       'career': career.toJson(),
     };
   }
@@ -545,12 +646,15 @@ class GameState {
       fleetSpeedLevel: json['fleetSpeedLevel'] as int? ?? 1,
       finishLinesCount: json['finishLinesCount'] as int? ?? 1,
       circuitTier: json['circuitTier'] as int? ?? 1,
+      boostPadCount: json['boostPadCount'] as int? ?? 0,
       boostPadLevel: json['boostPadLevel'] as int? ?? 1,
       claimedLearningMilestones: json['claimedLearningMilestones'] != null
           ? List<int>.from(json['claimedLearningMilestones'] as List)
           : const [],
       hasSeenSortTutorial:
           json['hasSeenSortTutorial'] as bool? ?? (highestTier > 3),
+      hasSeenDarkMatterIntro:
+          json['hasSeenDarkMatterIntro'] as bool? ?? (highestTier > 3),
       career: json['career'] != null
           ? CareerModel.fromJson(json['career'] as Map<String, dynamic>)
           : CareerModel.initial(),

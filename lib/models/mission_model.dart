@@ -113,26 +113,29 @@ class MissionModel {
   /// Initial starter missions catalog calibrated to player progression.
   static List<MissionModel> getInitialMissions() {
     return [
+      // Requires sustained play — tutorial does ~3–5 merges, player needs 30 more
       const MissionModel(
         id: 'm1_merge_3',
         title: 'Fleet Assembly',
-        description: 'Merge ships 3 times on the grid',
+        description: 'Merge ships 30 times on the grid',
         type: MissionType.mergeCount,
-        targetValue: 3,
+        targetValue: 30,
         currentProgress: 0,
-        rewardCoins: 100,
-        rewardDarkMatter: 1,
+        rewardCoins: 2500,
+        rewardDarkMatter: 0,
       ),
+      // 200 crossings = roughly 5–10 mins of active play with a small fleet
       const MissionModel(
         id: 'm2_cross_20',
         title: 'Orbital Speedrun',
-        description: 'Cross the income line 20 times',
+        description: 'Cross the income line 200 times',
         type: MissionType.crossCount,
-        targetValue: 20,
+        targetValue: 200,
         currentProgress: 0,
-        rewardCoins: 250,
-        rewardDarkMatter: 2,
+        rewardCoins: 8000,
+        rewardDarkMatter: 0,
       ),
+      // Requires earning enough to unlock T3 — introduces Dark Matter!
       const MissionModel(
         id: 'm3_tier_3',
         title: 'Solar Upgrade',
@@ -140,29 +143,32 @@ class MissionModel {
         type: MissionType.unlockTier,
         targetValue: 3,
         currentProgress: 1,
-        rewardCoins: 600,
-        rewardDarkMatter: 3,
+        rewardCoins: 15000,
+        rewardDarkMatter: 10,
       ),
+      // Buying 30 ships means repeated trips to shipyard over many sessions
       const MissionModel(
         id: 'm4_buy_10',
         title: 'Shipyard Contractor',
-        description: 'Purchase 10 ships from shipyard',
+        description: 'Purchase 30 ships from the shipyard',
         type: MissionType.buyShipCount,
-        targetValue: 10,
+        targetValue: 30,
         currentProgress: 0,
-        rewardCoins: 1200,
-        rewardDarkMatter: 5,
+        rewardCoins: 25000,
+        rewardDarkMatter: 12,
       ),
+      // 1000 crossings = solid idle progression milestone
       const MissionModel(
         id: 'm5_cross_100',
         title: 'Hyperdrive Warp',
-        description: 'Cross the income line 100 times',
+        description: 'Cross the income line 1,000 times',
         type: MissionType.crossCount,
-        targetValue: 100,
+        targetValue: 1000,
         currentProgress: 0,
-        rewardCoins: 3000,
-        rewardDarkMatter: 8,
+        rewardCoins: 75000,
+        rewardDarkMatter: 20,
       ),
+      // Reaching T5 requires significant fleet building and coin accumulation
       const MissionModel(
         id: 'm6_tier_5',
         title: 'Cruiser Class',
@@ -170,18 +176,19 @@ class MissionModel {
         type: MissionType.unlockTier,
         targetValue: 5,
         currentProgress: 1,
-        rewardCoins: 7500,
-        rewardDarkMatter: 15,
+        rewardCoins: 200000,
+        rewardDarkMatter: 40,
       ),
+      // 100 merges is a long-term mastery goal
       const MissionModel(
         id: 'm7_merge_25',
         title: 'Nanite Synthesis',
-        description: 'Merge ships 25 times',
+        description: 'Merge ships 100 times',
         type: MissionType.mergeCount,
-        targetValue: 25,
+        targetValue: 100,
         currentProgress: 0,
-        rewardCoins: 15000,
-        rewardDarkMatter: 20,
+        rewardCoins: 500000,
+        rewardDarkMatter: 75,
       ),
     ];
   }

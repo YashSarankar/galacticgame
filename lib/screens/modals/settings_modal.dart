@@ -367,10 +367,71 @@ class _SettingsModalState extends ConsumerState<SettingsModal> {
                   );
                 },
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
+
+              // Restore Purchases Action Button
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final iap = ref.read(iapServiceProvider);
+                  await iap.restorePurchases(
+                    onComplete: () {
+                      if (!context.mounted) return;
+                      final bool success = ref
+                          .read(gameStateProvider.notifier)
+                          .restorePurchases();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          backgroundColor: const Color(0xFF131B3A),
+                          content: Text(
+                            success
+                                ? '✅ Purchases Restored Successfully!'
+                                : 'ℹ️ No previous purchases found on this account.',
+                            style: TextStyle(
+                              color: success
+                                  ? const Color(0xFF00FF88)
+                                  : const Color(0xFFFFB800),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                    onError: (err) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          backgroundColor: const Color(0xFF2D1520),
+                          content: Text(
+                            '❌ Restore error: $err',
+                            style: const TextStyle(color: Color(0xFFFF4060)),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+                icon: const Icon(Icons.restore_rounded,
+                    color: Color(0xFF00F0FF), size: 16),
+                label: const Text(
+                  'RESTORE IN-APP PURCHASES',
+                  style: TextStyle(
+                    color: Color(0xFF00F0FF),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFF00F0FF), width: 1.1),
+                  minimumSize: const Size(double.infinity, 40),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
 
               // Section 3: Game Data Management
-              _buildSectionHeader('GAME DATA & PROGRESSION'),
+              _buildSectionHeader('GAME DATA MANAGEMENT'),
               const SizedBox(height: 8),
 
               OutlinedButton.icon(

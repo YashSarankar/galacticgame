@@ -35,6 +35,7 @@ class GalacticFlameGame extends FlameGame with TapCallbacks {
   final List<BoostPadComponent> _boostPads = [];
   int _finishLinesCount = 1;
   int _circuitTier = 1;
+  int _boostPadCount = 0;
   double _boostPadMultiplier = 1.50;
 
   final List<MovingShipComponent> _activeShipComponents = [];
@@ -83,23 +84,17 @@ class GalacticFlameGame extends FlameGame with TapCallbacks {
       shipComp.triggerTapSurge();
     }
 
-    // Spawn touch ripple, supersonic warp speed streaks & dynamic sector sparks
+    // Subtle touch ripple & soft micro-sparks (clean, non-distracting feedback)
     add(RadialShockwaveComponent(
       position: event.canvasPosition,
-      color: _currentTheme.trackPrimaryGlow,
-      maxRadius: 36.0,
-      duration: 0.35,
+      color: _currentTheme.trackPrimaryGlow.withAlpha((0.35 * 255).round()),
+      maxRadius: 22.0,
+      duration: 0.28,
     ));
     add(SparkBurstComponent(
       position: event.canvasPosition,
-      baseColor: _currentTheme.particleSparkColor,
-      count: 14,
-    ));
-    add(WarpSpeedLinesComponent(
-      position: event.canvasPosition,
-      color: _currentTheme.trackPrimaryGlow,
-      duration: 0.35,
-      lineCount: 16,
+      baseColor: _currentTheme.particleSparkColor.withAlpha((0.5 * 255).round()),
+      count: 4,
     ));
   }
 
@@ -138,10 +133,16 @@ class GalacticFlameGame extends FlameGame with TapCallbacks {
     }
   }
 
+  int _highestTierUnlocked = 1;
+
+  void updateHighestTier(int tier) {
+    _highestTierUnlocked = tier;
+  }
+
   void _spawnAsteroidHazard() {
     if (size.x <= 0 || size.y <= 0) return;
     final random = Random();
-    final bool isDM = random.nextDouble() < 0.25;
+    final bool isDM = (_highestTierUnlocked >= 3) && (random.nextDouble() < 0.10);
 
     final double startX = 20.0 + random.nextDouble() * (size.x - 40.0);
     final double startY = random.nextBool() ? 0.0 : size.y * 0.85;
@@ -185,13 +186,17 @@ class GalacticFlameGame extends FlameGame with TapCallbacks {
     }
   }
 
-  /// Updates the number of active Laser Finish Gates (1 to 4)
+  /// Updates the number of active on-track finish laser gates (1 to 4)
   void updateFinishLines(int count) {
     if (_finishLinesCount == count) return;
-    _finishLinesCount = count.clamp(1, 4);
+    _finishLinesCount = count;
     if (_isInitialized) {
       _rebuildGateComponents();
-      _syncShipsToTrack();
+      final double totalLen = _track.trackLength;
+      final offsets = _getGateOffsets(totalLen, count);
+      for (final ship in _activeShipComponents) {
+        ship.updateGateOffsets(offsets);
+      }
     }
   }
 
@@ -204,6 +209,15 @@ class GalacticFlameGame extends FlameGame with TapCallbacks {
       _rebuildGateComponents();
       _rebuildBoostPads();
       _syncShipsToTrack();
+    }
+  }
+
+  /// Updates the installed on-track boost pad count (0, 1, or 2 max)
+  void updateBoostPadCount(int count) {
+    if (_boostPadCount == count) return;
+    _boostPadCount = count;
+    if (_isInitialized) {
+      _rebuildBoostPads();
     }
   }
 
@@ -224,13 +238,12 @@ class GalacticFlameGame extends FlameGame with TapCallbacks {
     return true;
   }
 
-  /// Updates global speed multiplier (fleet upgrades, 2x boosts, fever mode)
+  /// Updates global speed multiplier (fleet upgrades, 2x boosts, nitro/fever mode)
   void setSpeedMultiplier(double multiplier, {bool isFever = false}) {
     _isFeverActive = isFever;
-    final double effectiveMultiplier = multiplier * (isFever ? 3.0 : 1.0);
-    _globalSpeedMultiplier = effectiveMultiplier;
+    _globalSpeedMultiplier = multiplier;
     for (final shipComp in _activeShipComponents) {
-      shipComp.speedMultiplier = effectiveMultiplier;
+      shipComp.speedMultiplier = multiplier;
     }
   }
 
@@ -249,29 +262,15 @@ class GalacticFlameGame extends FlameGame with TapCallbacks {
     }
   }
 
-  List<double> _getBoostPadOffsets(double totalLen, int tier) {
-    if (totalLen <= 0) return [];
-    switch (tier) {
-      case 3:
-        // Infinity Figure-8: Outer corner apexes
-        return [totalLen * 0.20, totalLen * 0.70];
-      case 4:
-        // Tri-Loop: 3 apex turns
-        return [totalLen * 0.166, totalLen * 0.50, totalLen * 0.833];
-      case 5:
-        // Quad-Spiral: 4 apex turns
-        return [
-          totalLen * 0.125,
-          totalLen * 0.375,
-          totalLen * 0.625,
-          totalLen * 0.875
-        ];
-      case 1:
-      case 2:
-      default:
-        // Stadium Oval / Ellipse apexes
-        return [totalLen * 0.25, totalLen * 0.75];
+  /// Returns pad offsets for exactly up to 2 boost pads on opposite apexes
+  List<double> _getBoostPadOffsets(double totalLen, int padCount) {
+    if (totalLen <= 0 || padCount <= 0) return [];
+    if (padCount == 1) {
+      // 1 Boost Pad placed at the first apex (25% of circuit)
+      return [totalLen * 0.25];
     }
+    // Exactly 2 Boost Pads max: placed at opposite apexes (25% and 75% of circuit)
+    return [totalLen * 0.25, totalLen * 0.75];
   }
 
   void _rebuildGateComponents() {
@@ -290,12 +289,12 @@ class GalacticFlameGame extends FlameGame with TapCallbacks {
           _track.pathMetric!.getTangentForOffset(offset);
       final pos = lineTangent != null
           ? Vector2(lineTangent.position.dx, lineTangent.position.dy)
-          : Vector2(size.x / 2, size.y * 0.14);
+          : Vector2(size.x / 2, size.y * 0.82);
       final angle = lineTangent != null ? lineTangent.angle + (pi / 2) : 0.0;
 
       final gate = IncomeLineComponent(
         position: pos,
-        trackWidth: 40.0,
+        trackWidth: 44.0,
         angle: angle,
       );
       _incomeLines.add(gate);
@@ -312,7 +311,7 @@ class GalacticFlameGame extends FlameGame with TapCallbacks {
     _boostPads.clear();
 
     final double totalLen = _track.trackLength;
-    final List<double> padOffsets = _getBoostPadOffsets(totalLen, _circuitTier);
+    final List<double> padOffsets = _getBoostPadOffsets(totalLen, _boostPadCount);
 
     for (final offset in padOffsets) {
       final ui.Tangent? padTangent =
@@ -329,6 +328,11 @@ class GalacticFlameGame extends FlameGame with TapCallbacks {
       );
       _boostPads.add(pad);
       add(pad);
+    }
+
+    // Synchronize boost pad offsets on all active spacecraft
+    for (final ship in _activeShipComponents) {
+      ship.updateBoostPadOffsets(padOffsets);
     }
   }
 
@@ -415,10 +419,18 @@ class GalacticFlameGame extends FlameGame with TapCallbacks {
         onBossDamaged: (dmg, {bool isTap = false}) {
           onBossDamaged?.call(dmg, isTap: isTap);
         },
+        onEmpBlast: _handleBossEmpBlast,
       );
       add(_bossComponent!);
     } else {
       _bossComponent!.updateBossModel(boss);
+    }
+  }
+
+  void _handleBossEmpBlast() {
+    if (_activeShipComponents.isEmpty) return;
+    for (final shipComp in _activeShipComponents) {
+      shipComp.applyStun(3.0);
     }
   }
 

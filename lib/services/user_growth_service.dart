@@ -119,7 +119,7 @@ class UserGrowthService {
     CommanderRankInfo(
       rank: 3,
       title: 'Flight Officer',
-      subtitle: 'Daily Transmissions & Bay Organization',
+      subtitle: 'Quantum Tech Tree, Daily Drops & Auto-Sort',
       icon: Icons.flight_takeoff_rounded,
       color: Color(0xFF00FF88),
       requiredTier: 3,
@@ -150,8 +150,8 @@ class UserGrowthService {
     ),
     CommanderRankInfo(
       rank: 7,
-      title: 'Quantum Engineer',
-      subtitle: 'Quantum Matrices & Dark Matter Tech Tree',
+      title: 'Quantum Master',
+      subtitle: 'Quantum Overdrive & Galactic Research',
       icon: Icons.memory_rounded,
       color: Color(0xFFBD00FF),
       requiredTier: 7,
@@ -225,7 +225,8 @@ class UserGrowthService {
         return 2; // Tier 2 (Discovered 2nd ship, unlocked encyclopedia)
       case GameFeature.dailyCalendar:
       case GameFeature.autoSort:
-        return 3; // Tier 3 (Daily habits & hangar organization)
+      case GameFeature.techTree:
+        return 3; // Tier 3 (Daily habits, hangar auto-sort & Dark Matter Tech Tree)
       case GameFeature.multiLaserGates:
         return 4; // Tier 4 (Multi-gate circuit payouts)
       case GameFeature.hyperPads:
@@ -233,8 +234,6 @@ class UserGrowthService {
         return 5; // Tier 5 (Speed pads & lucky wheel)
       case GameFeature.autoMerge:
         return 6; // Tier 6 (Earned Auto-Merge Superpower)
-      case GameFeature.techTree:
-        return 7; // Tier 7 (Dark Matter Tech Tree)
       case GameFeature.trackEvolution:
         return 8; // Tier 8 (Track Evolution into figure-8 & pulsar)
       case GameFeature.achievements:
@@ -450,7 +449,7 @@ class UserGrowthService {
           description: 'Invest Dark Matter gems into permanent tech nodes for speed, discount rates, and lucky clones.',
           icon: Icons.account_tree_rounded,
           color: Color(0xFFBD00FF),
-          requiredTier: 7,
+          requiredTier: 3,
           location: 'Command Hub > Upgrades & Trophies',
           actionLabel: 'OPEN TECH TREE',
           howItWorks:
@@ -638,8 +637,8 @@ class UserGrowthService {
       title: 'First Flight Fusion',
       objective: 'Merge two Novice Interceptors into a Tier 2 Vanguard Scout.',
       icon: Icons.merge_type_rounded,
-      rewardCredits: 500.0,
-      rewardDarkMatter: 5.0,
+      rewardCredits: 1000.0,
+      rewardDarkMatter: 0.0,
       checkCompleted: (state) => state.highestTierUnlocked >= 2,
     ),
     LearningMilestoneQuest(
@@ -647,17 +646,17 @@ class UserGrowthService {
       title: 'Engine Overclock',
       objective: 'Upgrade Fleet Engine Speed to Level 2 in the Circuit Engineering Bar.',
       icon: Icons.speed_rounded,
-      rewardCredits: 1000.0,
-      rewardDarkMatter: 5.0,
+      rewardCredits: 2000.0,
+      rewardDarkMatter: 0.0,
       checkCompleted: (state) => state.fleetSpeedLevel >= 2,
     ),
     LearningMilestoneQuest(
       id: 3,
-      title: 'Fleet Officer Promotion',
-      objective: 'Reach Spacecraft Tier 3 to unlock Daily Supply Drops & Fleet Auto-Sort.',
-      icon: Icons.flight_takeoff_rounded,
-      rewardCredits: 2500.0,
-      rewardDarkMatter: 10.0,
+      title: 'Dark Matter Breakthrough',
+      objective: 'Reach Spacecraft Tier 3 to unlock Dark Matter Gems, Tech Tree & Daily Drops.',
+      icon: Icons.diamond_rounded,
+      rewardCredits: 5000.0,
+      rewardDarkMatter: 15.0,
       checkCompleted: (state) => state.highestTierUnlocked >= 3,
     ),
     LearningMilestoneQuest(

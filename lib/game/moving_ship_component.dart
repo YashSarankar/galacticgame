@@ -1,10 +1,12 @@
 import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flame/components.dart';
+import 'package:flame/events.dart';
 import 'package:flame/flame.dart';
 import 'package:flutter/material.dart';
 import '../models/ship_model.dart';
 import 'particle_effects.dart';
+import 'floating_text_component.dart';
 
 /// Callback when a ship crosses a laser gate checkpoint
 typedef OnShipCrossGate = void Function(
@@ -15,7 +17,7 @@ typedef OnShipCrossBoostPad = void Function(
     ShipModel ship, Vector2 position, int padIndex);
 
 /// Moving spacecraft component along a closed loop track metric.
-class MovingShipComponent extends PositionComponent {
+class MovingShipComponent extends PositionComponent with TapCallbacks {
   ShipModel ship;
   ui.PathMetric pathMetric;
   double trackTotalLength;
@@ -31,6 +33,8 @@ class MovingShipComponent extends PositionComponent {
   double _trailTimer = 0.0;
   double _penaltyTimer = 0.0;
   double _penaltyFactor = 1.0;
+  double _stunTimer = 0.0;
+  double _stunSparkTimer = 0.0;
   Sprite? _shipSprite;
   Sprite? _fireSprite;
   int _fireFrame = 0;
@@ -48,6 +52,39 @@ class MovingShipComponent extends PositionComponent {
     this.onCrossBoostPad,
     this.currentDistance = 0.0,
   }) : super(size: Vector2(36, 36), anchor: Anchor.center);
+
+  bool get isStunned => _stunTimer > 0.0;
+
+  /// Applies temporary EMP stun from Boss attacks
+  void applyStun(double duration) {
+    _stunTimer = max(_stunTimer, duration);
+    if (parent != null) {
+      parent!.add(SparkBurstComponent(
+        position: position.clone(),
+        baseColor: const Color(0xFF00F0FF),
+        count: 10,
+      ));
+    }
+  }
+
+  /// Clears stun immediately (e.g. player tap reboot)
+  void clearStun() {
+    _stunTimer = 0.0;
+    _boostTimer = 0.6; // Reboot impulse surge!
+    if (parent != null) {
+      parent!.add(FloatingTextComponent(
+        text: '⚡ REBOOTED!',
+        position: position.clone() + Vector2(0, -18),
+        glowColor: const Color(0xFF00FF88),
+        duration: 0.8,
+      ));
+      parent!.add(SparkBurstComponent(
+        position: position.clone(),
+        baseColor: const Color(0xFF00FF88),
+        count: 14,
+      ));
+    }
+  }
 
   /// Updates the track geometry and metric when resizing or evolving tracks
   void updateTrackMetric(ui.PathMetric newMetric, double newLength) {
@@ -100,6 +137,16 @@ class MovingShipComponent extends PositionComponent {
   }
 
   @override
+  void onTapDown(TapDownEvent event) {
+    super.onTapDown(event);
+    if (isStunned) {
+      clearStun();
+    } else {
+      triggerTapSurge();
+    }
+  }
+
+  @override
   Future<void> onLoad() async {
     super.onLoad();
     try {
@@ -130,6 +177,23 @@ class MovingShipComponent extends PositionComponent {
   void update(double dt) {
     super.update(dt);
     if (trackTotalLength <= 0) return;
+
+    // Handle EMP Stun
+    if (_stunTimer > 0) {
+      _stunTimer -= dt;
+      _stunSparkTimer += dt;
+      if (_stunSparkTimer >= 0.18) {
+        _stunSparkTimer = 0.0;
+        if (parent != null) {
+          parent!.add(SparkBurstComponent(
+            position: position.clone(),
+            baseColor: const Color(0xFF00F0FF),
+            count: 3,
+          ));
+        }
+      }
+      return; // Frozen in place during EMP stun!
+    }
 
     if (_penaltyTimer > 0) {
       _penaltyTimer -= dt;
@@ -174,39 +238,35 @@ class MovingShipComponent extends PositionComponent {
       }
 
       if (crossed) {
-        final ui.Tangent? lineTangent =
+        final ui.Tangent? tangent =
             pathMetric.getTangentForOffset(gateOffset);
-        final Vector2 gatePos = lineTangent != null
-            ? Vector2(lineTangent.position.dx, lineTangent.position.dy)
+        final gatePos = tangent != null
+            ? Vector2(tangent.position.dx, tangent.position.dy)
             : position;
         onCrossGate(ship, gatePos, i);
       }
     }
 
-    // 2. Check crossing for on-track Hyper Boost Pads
+    // 2. Check crossing for each active boost pad on the circuit
     for (int i = 0; i < boostPadOffsets.length; i++) {
       final double padOffset = boostPadOffsets[i];
-      bool crossedPad = false;
+      bool padCrossed = false;
 
       if (newDist >= trackTotalLength) {
-        if (padOffset == 0.0) {
-          crossedPad = true;
-        } else if (prevDist < padOffset) {
-          crossedPad = true;
-        } else if (wrappedDist >= padOffset) {
-          crossedPad = true;
+        if (prevDist < padOffset || wrappedDist >= padOffset) {
+          padCrossed = true;
         }
       } else {
         if (prevDist < padOffset && newDist >= padOffset) {
-          crossedPad = true;
+          padCrossed = true;
         }
       }
 
-      if (crossedPad) {
-        _boostTimer = 1.0; // 1.0 second hyper-thrust impulse
+      if (padCrossed) {
+        _boostTimer = 0.50; // Hyper boost impulse!
         final ui.Tangent? padTangent =
             pathMetric.getTangentForOffset(padOffset);
-        final Vector2 padPos = padTangent != null
+        final padPos = padTangent != null
             ? Vector2(padTangent.position.dx, padTangent.position.dy)
             : position;
         onCrossBoostPad?.call(ship, padPos, i);
@@ -248,25 +308,39 @@ class MovingShipComponent extends PositionComponent {
     final offset = Vector2(cos(backAngle), sin(backAngle)) * 14.0;
     parent!.add(SparkBurstComponent(
       position: position + offset,
-      baseColor: _boostTimer > 0 ? const Color(0xFF00F0FF) : ship.glowColor,
-      count: _boostTimer > 0 ? 6 : 3,
+      baseColor: _boostTimer > 0
+          ? ship.glowColor.withAlpha((0.6 * 255).round())
+          : ship.glowColor.withAlpha((0.35 * 255).round()),
+      count: _boostTimer > 0 ? 3 : 2,
     ));
   }
 
   @override
   void render(Canvas canvas) {
-    if (_boostTimer > 0) {
-      // Radiant supersonic speed trail glow behind ship
-      final glowPaint = Paint()
+    if (isStunned) {
+      // EMP Electric Stun Aura & Lightning Cage
+      final stunPaint = Paint()
         ..color = const Color(0xFF00F0FF).withAlpha((0.6 * 255).round())
-        ..maskFilter = const MaskFilter.blur(BlurStyle.solid, 8.0);
-      canvas.drawCircle(Offset(size.x / 2, size.y / 2), 24.0, glowPaint);
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5
+        ..maskFilter = const MaskFilter.blur(BlurStyle.solid, 6.0);
+      canvas.drawCircle(Offset(size.x / 2, size.y / 2), 22.0, stunPaint);
+
+      final innerStun = Paint()
+        ..color = const Color(0xFFBD00FF).withAlpha((0.3 * 255).round());
+      canvas.drawCircle(Offset(size.x / 2, size.y / 2), 20.0, innerStun);
+    } else if (_boostTimer > 0) {
+      // Soft, subtle speed aura behind ship (gentle & non-distracting)
+      final glowPaint = Paint()
+        ..color = ship.glowColor.withAlpha((0.20 * 255).round())
+        ..maskFilter = const MaskFilter.blur(BlurStyle.solid, 4.0);
+      canvas.drawCircle(Offset(size.x / 2, size.y / 2), 17.0, glowPaint);
     }
 
-    if (_fireSprite != null) {
+    if (!isStunned && _fireSprite != null) {
       canvas.save();
       canvas.translate(size.x / 2, size.y - 2);
-      canvas.scale(_boostTimer > 0 ? 1.1 : 0.7, _boostTimer > 0 ? 1.3 : 0.7);
+      canvas.scale(_boostTimer > 0 ? 0.95 : 0.7, _boostTimer > 0 ? 1.05 : 0.7);
       _fireSprite!.render(canvas, anchor: Anchor.topCenter);
       canvas.restore();
     }

@@ -177,6 +177,33 @@ class SoundService {
   }
 
 
+  /// Play mystery crate unboxing sound & haptic burst
+  void playCrateOpenSound() {
+    if (isHapticsEnabled) {
+      HapticFeedback.mediumImpact();
+    }
+    if (isMuted) return;
+    SystemSound.play(SystemSoundType.click);
+  }
+
+  /// Play ship deployment onto circuit racetrack
+  void playDeployShipSound() {
+    if (isHapticsEnabled) {
+      HapticFeedback.mediumImpact();
+    }
+    if (isMuted) return;
+    SystemSound.play(SystemSoundType.click);
+  }
+
+  /// Play flight ops upgrade sound & haptic
+  void playUpgradeSound() {
+    if (isHapticsEnabled) {
+      HapticFeedback.lightImpact();
+    }
+    if (isMuted) return;
+    SystemSound.play(SystemSoundType.click);
+  }
+
   /// Play merge combo chime with intensifying haptic feedback
   void playComboSound(int comboCount) {
     if (isHapticsEnabled) {

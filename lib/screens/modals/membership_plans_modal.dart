@@ -933,23 +933,23 @@ class _MembershipPlansModalState extends ConsumerState<MembershipPlansModal>
                   ),
                 ),
                 onPressed: () {
-                  final razorpay = ref.read(razorpayServiceProvider);
-                  razorpay.startVipPassPayment(
-                    onSuccess: (paymentId) {
+                  final iap = ref.read(iapServiceProvider);
+                  iap.purchaseVipPass(
+                    onSuccess: () {
                       if (!mounted) return;
                       ref.read(gameStateProvider.notifier).purchaseRemoveAds();
                       Navigator.of(context).pop();
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          backgroundColor: const Color(0xFF131B3A),
+                        const SnackBar(
+                          backgroundColor: Color(0xFF131B3A),
                           content: Text(
-                            '🎉 Payment Verified ($paymentId)! Welcome VIP Commander! All ads removed + 500 DM + Lifetime Drone!',
-                            style: const TextStyle(
+                            '🎉 Purchase Confirmed! Welcome VIP Commander! All ads removed + 500 DM + Lifetime Drone!',
+                            style: TextStyle(
                               color: Color(0xFFFFD700),
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          duration: const Duration(seconds: 4),
+                          duration: Duration(seconds: 4),
                         ),
                       );
                     },
@@ -959,7 +959,7 @@ class _MembershipPlansModalState extends ConsumerState<MembershipPlansModal>
                         SnackBar(
                           backgroundColor: const Color(0xFF2D1520),
                           content: Text(
-                            '❌ Payment Cancelled: $errorMessage',
+                            '❌ Purchase Cancelled: $errorMessage',
                             style: const TextStyle(
                               color: Color(0xFFFF4060),
                               fontWeight: FontWeight.bold,
@@ -994,30 +994,49 @@ class _MembershipPlansModalState extends ConsumerState<MembershipPlansModal>
               ),
             ),
             const SizedBox(height: 4),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 TextButton(
-                  onPressed: () {
-                    final bool success = ref
-                        .read(gameStateProvider.notifier)
-                        .restorePurchases();
-                    Navigator.of(context).pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        backgroundColor: const Color(0xFF131B3A),
-                        content: Text(
-                          success
-                              ? '✅ Purchases Restored Successfully!'
-                              : 'ℹ️ No previous purchases found on this account.',
-                          style: TextStyle(
-                            color: success
-                                ? const Color(0xFF00FF88)
-                                : const Color(0xFFFFB800),
-                            fontWeight: FontWeight.bold,
+                  onPressed: () async {
+                    final iap = ref.read(iapServiceProvider);
+                    await iap.restorePurchases(
+                      onComplete: () {
+                        if (!mounted) return;
+                        final bool success = ref
+                            .read(gameStateProvider.notifier)
+                            .restorePurchases();
+                        Navigator.of(context).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            backgroundColor: const Color(0xFF131B3A),
+                            content: Text(
+                              success
+                                  ? '✅ Purchases Restored Successfully!'
+                                  : 'ℹ️ No previous purchases found on this account.',
+                              style: TextStyle(
+                                color: success
+                                    ? const Color(0xFF00FF88)
+                                    : const Color(0xFFFFB800),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
+                        );
+                      },
+                      onError: (err) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            backgroundColor: const Color(0xFF2D1520),
+                            content: Text(
+                              '❌ Restore error: $err',
+                              style: const TextStyle(color: Color(0xFFFF4060)),
+                            ),
+                          ),
+                        );
+                      },
                     );
                   },
                   child: const Text(

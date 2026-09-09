@@ -1,3 +1,5 @@
+import 'dart:math';
+
 enum SkillEffectType {
   baseDropTier,      // Increases tier of ships bought from store
   offlineCapHours,   // Extends offline earnings cap from 2h to up to 24h
@@ -35,10 +37,10 @@ class SkillNodeModel {
 
   bool get isMaxed => level >= maxLevel;
 
-  /// Upgrade cost in Dark Matter for the current level.
+  /// Upgrade cost in Dark Matter for the current level with calibrated exponential scaling.
   double get currentUpgradeCost {
     if (isMaxed) return double.infinity;
-    return baseCost * (level == 0 ? 1.0 : (level * costMultiplier));
+    return (baseCost * pow(costMultiplier, level)).floorToDouble();
   }
 
   /// Current calculated bonus value.
@@ -88,24 +90,42 @@ class SkillNodeModel {
   }
 
   factory SkillNodeModel.fromJson(Map<String, dynamic> json) {
+    final String id = json['id'] as String? ?? '';
+    final canonicalList = getInitialSkills();
+    final canonical = canonicalList.firstWhere(
+      (s) => s.id == id,
+      orElse: () => const SkillNodeModel(
+        id: '',
+        title: '',
+        description: '',
+        iconAsset: '',
+        effectType: SkillEffectType.baseDropTier,
+        level: 0,
+        maxLevel: 5,
+        baseCost: 25,
+        costMultiplier: 1.8,
+        valuePerLevel: 1.0,
+      ),
+    );
+
     return SkillNodeModel(
-      id: json['id'] as String,
-      title: json['title'] as String,
-      description: json['description'] as String,
-      iconAsset: json['iconAsset'] as String,
+      id: id,
+      title: json['title'] as String? ?? canonical.title,
+      description: json['description'] as String? ?? canonical.description,
+      iconAsset: json['iconAsset'] as String? ?? canonical.iconAsset,
       effectType: SkillEffectType.values.firstWhere(
         (e) => e.name == json['effectType'],
-        orElse: () => SkillEffectType.baseDropTier,
+        orElse: () => canonical.effectType,
       ),
-      level: json['level'] as int,
-      maxLevel: json['maxLevel'] as int,
-      baseCost: (json['baseCost'] as num).toDouble(),
-      costMultiplier: (json['costMultiplier'] as num).toDouble(),
-      valuePerLevel: (json['valuePerLevel'] as num).toDouble(),
+      level: (json['level'] as int? ?? 0).clamp(0, canonical.maxLevel),
+      maxLevel: canonical.maxLevel,
+      baseCost: canonical.baseCost,
+      costMultiplier: canonical.costMultiplier,
+      valuePerLevel: canonical.valuePerLevel,
     );
   }
 
-  /// Initial Default Skill Tree
+  /// Initial Default Skill Tree with calibrated tycoon progression costs.
   static List<SkillNodeModel> getInitialSkills() {
     return [
       const SkillNodeModel(
@@ -116,8 +136,8 @@ class SkillNodeModel {
         effectType: SkillEffectType.gridExpansion,
         level: 0,
         maxLevel: 4, // 8 + 4*2 = 16 slots
-        baseCost: 5,
-        costMultiplier: 2.0,
+        baseCost: 25,
+        costMultiplier: 2.2,
         valuePerLevel: 2.0,
       ),
       const SkillNodeModel(
@@ -128,8 +148,8 @@ class SkillNodeModel {
         effectType: SkillEffectType.baseDropTier,
         level: 0,
         maxLevel: 5,
-        baseCost: 8,
-        costMultiplier: 2.5,
+        baseCost: 30,
+        costMultiplier: 2.4,
         valuePerLevel: 1.0,
       ),
       const SkillNodeModel(
@@ -140,8 +160,8 @@ class SkillNodeModel {
         effectType: SkillEffectType.globalIncomeBoost,
         level: 0,
         maxLevel: 20,
-        baseCost: 4,
-        costMultiplier: 1.8,
+        baseCost: 15,
+        costMultiplier: 1.55,
         valuePerLevel: 0.25,
       ),
       const SkillNodeModel(
@@ -152,8 +172,8 @@ class SkillNodeModel {
         effectType: SkillEffectType.offlineCapHours,
         level: 0,
         maxLevel: 11,
-        baseCost: 4,
-        costMultiplier: 2.0,
+        baseCost: 15,
+        costMultiplier: 1.6,
         valuePerLevel: 2.0,
       ),
       const SkillNodeModel(
@@ -164,8 +184,8 @@ class SkillNodeModel {
         effectType: SkillEffectType.trackSpeedBoost,
         level: 0,
         maxLevel: 10,
-        baseCost: 6,
-        costMultiplier: 2.0,
+        baseCost: 20,
+        costMultiplier: 1.65,
         valuePerLevel: 0.15,
       ),
       const SkillNodeModel(
@@ -176,8 +196,8 @@ class SkillNodeModel {
         effectType: SkillEffectType.shipDiscount,
         level: 0,
         maxLevel: 8,
-        baseCost: 5,
-        costMultiplier: 1.9,
+        baseCost: 20,
+        costMultiplier: 1.75,
         valuePerLevel: 0.05,
       ),
     ];

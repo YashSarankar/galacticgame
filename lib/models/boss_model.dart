@@ -46,6 +46,13 @@ class BossModel {
   double get shieldPercentage =>
       maxShieldHealth > 0.0 ? (currentShieldHealth / maxShieldHealth).clamp(0.0, 1.0) : 0.0;
 
+  /// Regenerates kinetic shield over time up to maximum
+  BossModel regenerateShield(double amount) {
+    if (maxShieldHealth <= 0.0 || currentHealth <= 0.0) return this;
+    final newShield = min(maxShieldHealth, currentShieldHealth + amount);
+    return copyWith(currentShieldHealth: newShield);
+  }
+
   /// Applies damage through kinetic shield first, then passes remaining to hull
   BossModel applyDamage(double damage) {
     if (currentShieldHealth > 0.0) {
@@ -72,6 +79,7 @@ class BossModel {
   factory BossModel.createForSector({
     required int sectorLevel,
     int highestTierUnlocked = 1,
+    int totalBossesDefeated = 0,
     double baseIncomePerLap = 50.0,
   }) {
     const bossSprites = [
@@ -87,8 +95,11 @@ class BossModel {
       'Antimatter Leviathan',
     ];
 
-    final int effectiveLevel =
-        max(1, sectorLevel + ((highestTierUnlocked - 1) ~/ 2));
+    // Effective Boss Level upgrades after every single boss victory!
+    final int effectiveLevel = 1 +
+        totalBossesDefeated +
+        (sectorLevel - 1) * 2 +
+        ((highestTierUnlocked - 1) ~/ 2);
     final index = (effectiveLevel - 1) % bossSprites.length;
 
     // Determine archetype based on level
@@ -100,12 +111,16 @@ class BossModel {
     ];
     final archetype = archetypes[(effectiveLevel - 1) % archetypes.length];
 
-    // HP scales progressively with sector progression and spacecraft tier
-    final double hp = 300.0 * pow(1.35, max(0, effectiveLevel - 1)).toDouble();
-    final double shieldHp =
-        archetype == BossArchetype.shieldedTitan ? (hp * 0.5) : 0.0;
-    final double credits = max(5000.0, baseIncomePerLap * 50.0);
-    final double dm = 5.0 + (effectiveLevel * 3.0);
+    // HP scales exponentially after every boss defeat and tier unlock
+    final double hp =
+        (250.0 * pow(1.30, max(0, effectiveLevel - 1))).floorToDouble();
+    // Every Dreadnought has a fortified Kinetic Energy Shield (40% of HP, 60% for Shielded Titans)
+    final double shieldMultiplier =
+        archetype == BossArchetype.shieldedTitan ? 0.60 : 0.40;
+    final double shieldHp = (hp * shieldMultiplier).floorToDouble();
+    final double credits =
+        max(5000.0, baseIncomePerLap * 50.0 * pow(1.25, max(0, effectiveLevel - 1)));
+    final double dm = 5.0 + (effectiveLevel * 2.5);
 
     return BossModel(
       id: 'boss_${DateTime.now().millisecondsSinceEpoch}',

@@ -1,171 +1,325 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../services/storage_service.dart';
 import '../../services/ad_manager.dart';
+import '../../services/sound_service.dart';
 import '../../utils/number_formatter.dart';
 import '../../utils/game_theme.dart';
 
-/// Modal popup welcoming back the player with calculated offline income.
-class OfflineEarningsModal extends StatelessWidget {
+/// Modal popup welcoming back the player with animated ticker and 2X boost rewards.
+class OfflineEarningsModal extends StatefulWidget {
   final OfflineEarningsResult result;
+  final bool isVip;
   final VoidCallback onClaimRegular;
   final VoidCallback onClaimDoubled;
 
   const OfflineEarningsModal({
     super.key,
     required this.result,
+    this.isVip = false,
     required this.onClaimRegular,
     required this.onClaimDoubled,
   });
 
   @override
+  State<OfflineEarningsModal> createState() => _OfflineEarningsModalState();
+}
+
+class _OfflineEarningsModalState extends State<OfflineEarningsModal>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _animController;
+  late final Animation<double> _countAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    SoundService().playPrestigeSound();
+    HapticFeedback.mediumImpact();
+
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..forward();
+
+    _countAnimation = CurvedAnimation(
+      parent: _animController,
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final double baseCoins = widget.result.coinsEarned;
+    final double doubledCoins = baseCoins * 2;
+
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       child: Container(
-        decoration: GameTheme.glassCard(
-          borderColor: GameTheme.neonCyan,
-          backgroundColor: const Color(0xFF0F172A).withAlpha((0.95 * 255).round()),
-          radius: 24,
-          glow: true,
+        constraints: const BoxConstraints(maxWidth: 420),
+        decoration: BoxDecoration(
+          color: const Color(0xFF090D1C),
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(
+            color: widget.isVip
+                ? const Color(0xFF00FF88)
+                : const Color(0xFFFFD700),
+            width: 1.8,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: (widget.isVip
+                      ? const Color(0xFF00FF88)
+                      : const Color(0xFFFFD700))
+                  .withAlpha((0.35 * 255).round()),
+              blurRadius: 36,
+              spreadRadius: 2,
+            ),
+            BoxShadow(
+              color: Colors.black.withAlpha(220),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(22),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Glowing Cosmic Header Icon
+            // 1. Glowing Cosmic Header Icon
             Container(
-              width: 64,
-              height: 64,
+              width: 68,
+              height: 68,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: GameTheme.neonCyan.withAlpha((0.15 * 255).round()),
-                boxShadow: GameTheme.neonGlow(GameTheme.neonCyan, blur: 16),
+                gradient: RadialGradient(
+                  colors: [
+                    widget.isVip
+                        ? const Color(0xFF00FF88)
+                        : const Color(0xFFFFD700),
+                    const Color(0xFF0F172A),
+                  ],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: (widget.isVip
+                            ? const Color(0xFF00FF88)
+                            : const Color(0xFFFFD700))
+                        .withAlpha((0.5 * 255).round()),
+                    blurRadius: 20,
+                  ),
+                ],
               ),
-              child: const Icon(
-                Icons.hourglass_bottom_rounded,
-                color: GameTheme.neonCyan,
-                size: 36,
+              child: Icon(
+                widget.isVip
+                    ? Icons.workspace_premium_rounded
+                    : Icons.hourglass_bottom_rounded,
+                color: Colors.black,
+                size: 34,
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // 2. Title & Mission Dossier
+            const Text(
+              'WELCOME BACK, COMMANDER!',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 17,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.2,
+              ),
+            ),
+            const SizedBox(height: 4),
+
+            Text(
+              'While you were offline for ${NumberFormatter.formatSeconds(widget.result.elapsedSeconds)}, your active fleet accumulated massive circuit revenue!',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 11.5,
+                height: 1.35,
               ),
             ),
             const SizedBox(height: 16),
 
-            const Text(
-              'WELCOME BACK, COMMANDER',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: GameTheme.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 1.5,
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            Text(
-              'While you were away for ${NumberFormatter.formatSeconds(result.cappedSeconds)}, your automated fleet was hard at work!',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: GameTheme.textSecondary,
-                fontSize: 13,
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Income Amount Card
+            // 3. Animated Income Vault Display Card
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 16),
+              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
               decoration: BoxDecoration(
                 color: GameTheme.backgroundVoid,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(18),
                 border: Border.all(
-                  color: GameTheme.neonGold.withAlpha((0.4 * 255).round()),
+                  color: const Color(0xFFFFD700).withAlpha((0.35 * 255).round()),
                 ),
               ),
               child: Column(
                 children: [
-                  const Text(
-                    'OFFLINE INCOME GENERATED',
-                    style: TextStyle(
-                      color: GameTheme.textMuted,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.bolt_rounded,
+                          color: Color(0xFFFFD700), size: 14),
+                      const SizedBox(width: 4),
+                      const Text(
+                        'OFFLINE REVENUE HARVESTED',
+                        style: TextStyle(
+                          color: Colors.white54,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 6),
-                  Text(
-                    NumberFormatter.formatCredits(result.coinsEarned),
-                    style: const TextStyle(
-                      color: GameTheme.neonGold,
-                      fontSize: 28,
-                      fontWeight: FontWeight.w900,
-                      shadows: [
-                        Shadow(color: GameTheme.neonGold, blurRadius: 12),
-                      ],
+                  AnimatedBuilder(
+                    animation: _countAnimation,
+                    builder: (context, child) {
+                      final currentCoins = baseCoins * _countAnimation.value;
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.monetization_on_rounded,
+                              color: Color(0xFFFFD700), size: 24),
+                          const SizedBox(width: 6),
+                          Text(
+                            NumberFormatter.formatCredits(currentCoins),
+                            style: const TextStyle(
+                              color: Color(0xFFFFD700),
+                              fontSize: 26,
+                              fontWeight: FontWeight.w900,
+                              shadows: [
+                                Shadow(
+                                  color: Color(0xFFFFD700),
+                                  blurRadius: 14,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withAlpha((0.06 * 255).round()),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Vault Capacity Used: ${NumberFormatter.formatSeconds(widget.result.cappedSeconds)} (Efficiency: ${widget.isVip ? '40% VIP' : '20% Cadet'})',
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
 
-            // Rewarded 2x Claim CTA Button
+            // 4. 2X Bounty CTA Button
             SizedBox(
               width: double.infinity,
-              height: 52,
-              child: ElevatedButton.icon(
+              height: 50,
+              child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: GameTheme.neonGold,
+                  backgroundColor: widget.isVip
+                      ? const Color(0xFF00FF88)
+                      : const Color(0xFFFFD700),
                   foregroundColor: Colors.black,
                   elevation: 8,
+                  shadowColor: (widget.isVip
+                          ? const Color(0xFF00FF88)
+                          : const Color(0xFFFFD700))
+                      .withAlpha((0.6 * 255).round()),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
-                icon: const Icon(Icons.movie_creation_rounded, size: 20),
-                label: Text(
-                  'WATCH AD & 2X (${NumberFormatter.formatCredits(result.coinsEarned * 2)})',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 13,
-                    letterSpacing: 0.5,
+                onPressed: () {
+                  HapticFeedback.heavyImpact();
+                  SoundService().playPurchaseSound();
+                  if (widget.isVip) {
+                    widget.onClaimDoubled();
+                    if (context.mounted) Navigator.of(context).pop(true);
+                  } else {
+                    AdManager().showRewardedAd(
+                      onUserEarnedReward: () {
+                        widget.onClaimDoubled();
+                        if (context.mounted) {
+                          Navigator.of(context).pop(true);
+                        }
+                      },
+                    );
+                  }
+                },
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        widget.isVip
+                            ? Icons.stars_rounded
+                            : Icons.play_circle_fill_rounded,
+                        size: 20,
+                        color: Colors.black,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        widget.isVip
+                            ? 'CLAIM 2X (VIP BONUS): +${NumberFormatter.formatCredits(doubledCoins)}'
+                            : 'WATCH AD & 2X: +${NumberFormatter.formatCredits(doubledCoins)}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 12.5,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                onPressed: () {
-                  AdManager().showRewardedAd(
-                    onUserEarnedReward: () {
-                      onClaimDoubled();
-                      if (context.mounted) {
-                        Navigator.of(context).pop(true);
-                      }
-                    },
-                  );
-                },
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
 
-            // Regular Claim Button
+            // 5. Regular Claim Button
             SizedBox(
               width: double.infinity,
-              height: 44,
+              height: 40,
               child: TextButton(
                 style: TextButton.styleFrom(
-                  foregroundColor: GameTheme.textSecondary,
+                  foregroundColor: Colors.white60,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
                 onPressed: () {
-                  onClaimRegular();
+                  HapticFeedback.selectionClick();
+                  SoundService().playPurchaseSound();
+                  widget.onClaimRegular();
                   Navigator.of(context).pop(true);
                 },
-                child: const Text(
-                  'Claim Regular Amount',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                child: Text(
+                  'Claim 1X (+${NumberFormatter.formatCredits(baseCoins)})',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
                 ),
               ),
             ),

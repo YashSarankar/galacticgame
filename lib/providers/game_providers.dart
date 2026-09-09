@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/game_state.dart';
 import '../services/storage_service.dart';
-import '../services/razorpay_payment_service.dart';
+import '../services/iap_service.dart';
 import 'game_economy_provider.dart';
 
 export 'game_economy_provider.dart';
@@ -26,9 +26,9 @@ final initialGameLoaderProvider = FutureProvider<OfflineEarningsResult?>((ref) a
   return offlineResult;
 });
 
-/// Razorpay Payment Gateway Provider
-final razorpayServiceProvider = Provider<RazorpayPaymentService>((ref) {
-  final service = RazorpayPaymentService()..init();
+/// Google Play Billing / In-App Purchase Provider
+final iapServiceProvider = Provider<InAppPurchaseService>((ref) {
+  final service = InAppPurchaseService()..initialize();
   ref.onDispose(() => service.dispose());
   return service;
 });

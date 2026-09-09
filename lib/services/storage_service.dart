@@ -19,7 +19,7 @@ class OfflineEarningsResult {
     required this.ratePerSecond,
   });
 
-  bool get hasSignificantEarnings => coinsEarned >= 1.0 && elapsedSeconds >= 10;
+  bool get hasSignificantEarnings => coinsEarned >= 1.0 && elapsedSeconds >= 300;
 }
 
 /// Service handling local storage persistence and offline calculations.
@@ -108,6 +108,18 @@ class StorageService {
     final int lastSaved = state.lastSaveTimestamp;
     final int elapsedSeconds = max(0, ((now - lastSaved) / 1000).floor());
 
+    // Minimum 5 minutes (300 seconds) must pass before offline payout kicks in.
+    // This prevents brief app-switch moments from awarding coins.
+    const int minOfflineThresholdSeconds = 300;
+    if (elapsedSeconds < minOfflineThresholdSeconds) {
+      return OfflineEarningsResult(
+        elapsedSeconds: elapsedSeconds,
+        cappedSeconds: 0,
+        coinsEarned: 0,
+        ratePerSecond: 0,
+      );
+    }
+
     // Compute max offline cap from skill tree
     final offlineSkill = state.career.skills.firstWhere(
       (s) => s.effectType == SkillEffectType.offlineCapHours,
@@ -125,16 +137,15 @@ class StorageService {
       ),
     );
 
-    final double baseOfflineHours = state.hasRemovedAds ? 12.0 : 2.0;
-    final double maxOfflineHours = baseOfflineHours + (offlineSkill.level * 2.0); // 12h base for VIP (up to 34h with skills)
+    final double baseOfflineHours = state.hasRemovedAds ? 6.0 : 2.0;
+    final double maxOfflineHours = baseOfflineHours + (offlineSkill.level * 1.0); // 2h base for Cadets, 6h for VIP (up to 17h with maxed skills)
     final int maxOfflineCapSeconds = (maxOfflineHours * 3600).round();
     final int cappedSeconds = min(elapsedSeconds, maxOfflineCapSeconds);
-
 
     // Calculate approximate earnings per second based on active track ships
     // Standard track loop length is ~1400 units
     const double approxTrackLength = 1400.0;
-    double incomePerSec = 0.0;
+    double activeIncomePerSec = 0.0;
 
     // Income boost from skill tree
     final incomeSkill = state.career.skills.firstWhere(
@@ -156,15 +167,16 @@ class StorageService {
 
     for (final ship in state.trackShips) {
       final double crossingFreq = ship.baseSpeed / approxTrackLength;
-      incomePerSec += ship.calculateIncomePayout(multiplier: incomeMultiplier) * crossingFreq;
+      activeIncomePerSec += ship.calculateIncomePayout(multiplier: incomeMultiplier) * crossingFreq;
     }
 
-    // Default baseline if no ships
-    if (incomePerSec <= 0.0) {
-      incomePerSec = 5.0;
-    }
+    // Offline fleet efficiency: 20% for Cadets, 40% for VIPs.
+    // Lower than active-play to ensure offline is supplemental, not dominant.
+    final double offlineEfficiency = state.hasRemovedAds ? 0.40 : 0.20;
+    final double incomePerSec = activeIncomePerSec * offlineEfficiency;
+    // No artificial floor — if fleet earns nothing, offline pays nothing.
 
-    final double totalOfflineCoins = cappedSeconds * incomePerSec;
+    final double totalOfflineCoins = (cappedSeconds * incomePerSec).floorToDouble();
 
     return OfflineEarningsResult(
       elapsedSeconds: elapsedSeconds,

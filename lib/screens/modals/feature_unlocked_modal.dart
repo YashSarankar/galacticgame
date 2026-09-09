@@ -139,16 +139,20 @@ class _FeatureUnlockedModalState extends State<FeatureUnlockedModal> {
               children: [
                 Row(
                   children: [
-                    Text(
-                      'SYSTEM CLEARANCE UNLOCKED',
-                      style: TextStyle(
-                        color: currentFeature.color,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.0,
+                    Expanded(
+                      child: Text(
+                        'SYSTEM CLEARANCE UNLOCKED',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: currentFeature.color,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.6,
+                        ),
                       ),
                     ),
-                    const Spacer(),
+                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
