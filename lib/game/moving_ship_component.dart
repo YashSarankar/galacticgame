@@ -263,7 +263,7 @@ class MovingShipComponent extends PositionComponent with TapCallbacks {
       }
 
       if (padCrossed) {
-        _boostTimer = 0.50; // Hyper boost impulse!
+        _boostTimer = 0.35; // Snappy hyper boost impulse duration
         final ui.Tangent? padTangent =
             pathMetric.getTangentForOffset(padOffset);
         final padPos = padTangent != null
@@ -277,6 +277,11 @@ class MovingShipComponent extends PositionComponent with TapCallbacks {
       currentDistance = newDist % trackTotalLength;
     } else {
       currentDistance = newDist;
+    }
+
+    // Apply immediate forward impulse when boosted
+    if (_boostTimer > 0) {
+      currentDistance = (currentDistance + (ship.baseSpeed * (boostPadMultiplier - 1.0) * dt)) % trackTotalLength;
     }
 
     // Compute tangent and position along path

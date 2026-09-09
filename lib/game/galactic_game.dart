@@ -262,15 +262,16 @@ class GalacticFlameGame extends FlameGame with TapCallbacks {
     }
   }
 
-  /// Returns pad offsets for exactly up to 2 boost pads on opposite apexes
+  /// Returns pad offsets for up to 2 boost pads placed cleanly between finish line gates
   List<double> _getBoostPadOffsets(double totalLen, int padCount) {
     if (totalLen <= 0 || padCount <= 0) return [];
     if (padCount == 1) {
-      // 1 Boost Pad placed at the first apex (25% of circuit)
-      return [totalLen * 0.25];
+      // 1 Boost Pad placed on the upper-right straightaway (18% of circuit)
+      return [totalLen * 0.18];
     }
-    // Exactly 2 Boost Pads max: placed at opposite apexes (25% and 75% of circuit)
-    return [totalLen * 0.25, totalLen * 0.75];
+    // 2 Boost Pads: placed on opposite straightaways (18% and 68% of circuit)
+    // Avoids all finish line gate positions (0%, 25%, 33%, 50%, 67%, 75%)
+    return [totalLen * 0.18, totalLen * 0.68];
   }
 
   void _rebuildGateComponents() {
@@ -343,7 +344,7 @@ class GalacticFlameGame extends FlameGame with TapCallbacks {
     final List<double> gateOffsets =
         _getGateOffsets(totalLen, _finishLinesCount);
     final List<double> boostPadOffsets =
-        _getBoostPadOffsets(totalLen, _circuitTier);
+        _getBoostPadOffsets(totalLen, _boostPadCount);
 
     if (_currentShips.isEmpty) {
       for (final comp in _activeShipComponents) {
@@ -503,13 +504,19 @@ class GalacticFlameGame extends FlameGame with TapCallbacks {
     add(RadialShockwaveComponent(
       position: position,
       color: const Color(0xFF00F0FF),
-      maxRadius: 36.0,
+      maxRadius: 38.0,
       duration: 0.35,
     ));
     add(SparkBurstComponent(
       position: position,
       baseColor: const Color(0xFF00F0FF),
-      count: 12,
+      count: 14,
+    ));
+    add(FloatingTextComponent(
+      text: 'BOOST ⚡',
+      position: position + Vector2(0, -14),
+      glowColor: const Color(0xFF00F0FF),
+      duration: 0.6,
     ));
   }
 }
