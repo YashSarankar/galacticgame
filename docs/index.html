@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sarankar Developers | Galactic Merge: Space Tycoon</title>
+  <meta name="description" content="Official developer portal for Galactic Merge: Space Tycoon by Sarankar Developers. Merge futuristic starships, conquer cosmic circuits, and build your idle space fleet.">
+  <meta name="keywords" content="Galactic Merge, Space Tycoon, Sarankar Developers, Idle Game, Space Games, Android Games">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="app_icon_512x512.png">
+  <style>
+    :root {
+      --bg-dark: #070913;
+      --card-bg: rgba(18, 24, 43, 0.75);
+      --card-border: rgba(0, 240, 255, 0.2);
+      --neon-cyan: #00f0ff;
+      --neon-purple: #a855f7;
+      --neon-gold: #fbbf24;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+      line-height: 1.6;
+      min-height: 100vh;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* Cosmic Canvas Background */
+    #stars-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .wrapper {
+      position: relative;
+      z-index: 1;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px 60px;
+    }
+
+    /* Navbar */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 28px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: #fff;
+    }
+
+    .brand img {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      border: 1px solid var(--neon-cyan);
+      box-shadow: 0 0 15px rgba(0, 240, 255, 0.4);
+    }
+
+    .brand-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      background: linear-gradient(135deg, #ffffff, var(--neon-cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    nav {
+      display: flex;
+      gap: 20px;
+      align-items: center;
+    }
+
+    nav a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.95rem;
+      font-weight: 500;
+      transition: color 0.2s ease;
+    }
+
+    nav a:hover {
+      color: var(--neon-cyan);
+    }
+
+    /* Hero Section */
+    .hero {
+      padding: 70px 0 40px;
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 48px;
+      align-items: center;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(0, 240, 255, 0.1);
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--neon-cyan);
+      margin-bottom: 20px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .hero h1 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 3rem;
+      font-weight: 900;
+      line-height: 1.15;
+      margin-bottom: 20px;
+      background: linear-gradient(135deg, #ffffff 30%, var(--neon-cyan) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero p {
+      font-size: 1.15rem;
+      color: var(--text-muted);
+      margin-bottom: 32px;
+    }
+
+    .cta-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: linear-gradient(135deg, #00d2ff, #0072ff);
+      color: #fff;
+      padding: 14px 28px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 1rem;
+      text-decoration: none;
+      box-shadow: 0 4px 20px rgba(0, 210, 255, 0.4);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(0, 210, 255, 0.6);
+    }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: var(--text-main);
+      padding: 14px 24px;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 1rem;
+      text-decoration: none;
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: var(--neon-cyan);
+    }
+
+    .hero-graphic {
+      position: relative;
+      text-align: center;
+    }
+
+    .hero-graphic img {
+      width: 100%;
+      max-width: 480px;
+      border-radius: 20px;
+      border: 1px solid var(--card-border);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(0, 240, 255, 0.25);
+    }
+
+    /* Features Grid */
+    .section-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.8rem;
+      text-align: center;
+      margin: 70px 0 36px;
+      color: #fff;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 24px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--card-border);
+      padding: 28px 24px;
+      border-radius: 16px;
+      transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .card:hover {
+      transform: translateY(-5px);
+      border-color: var(--neon-cyan);
+      box-shadow: 0 10px 30px rgba(0, 240, 255, 0.15);
+    }
+
+    .card-icon {
+      font-size: 2.2rem;
+      margin-bottom: 14px;
+      display: inline-block;
+    }
+
+    .card h3 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.15rem;
+      margin-bottom: 10px;
+      color: #fff;
+    }
+
+    .card p {
+      font-size: 0.92rem;
+      color: var(--text-muted);
+    }
+
+    /* Developer Section */
+    .studio-box {
+      margin-top: 70px;
+      background: linear-gradient(135deg, rgba(18, 24, 43, 0.9), rgba(30, 20, 50, 0.8));
+      border: 1px solid rgba(168, 85, 247, 0.3);
+      padding: 36px;
+      border-radius: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 24px;
+    }
+
+    .studio-box h2 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.5rem;
+      margin-bottom: 8px;
+    }
+
+    .studio-box p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    /* Footer */
+    footer {
+      margin-top: 60px;
+      padding-top: 24px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+      font-size: 0.88rem;
+      color: var(--text-muted);
+    }
+
+    footer a {
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: color 0.2s ease;
+    }
+
+    footer a:hover {
+      color: var(--neon-cyan);
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 20px;
+    }
+
+    @media (max-width: 860px) {
+      .hero {
+        grid-template-columns: 1fr;
+        text-align: center;
+        padding-top: 40px;
+      }
+      .cta-group {
+        justify-content: center;
+      }
+      .hero h1 {
+        font-size: 2.2rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="stars-canvas"></canvas>
+
+  <div class="wrapper">
+    <header>
+      <a href="/" class="brand">
+        <img src="app_icon_512x512.png" alt="Galactic Merge Logo">
+        <span class="brand-title">SARANKAR DEVELOPERS</span>
+      </a>
+      <nav>
+        <a href="#features">Features</a>
+        <a href="privacy_policy.html">Privacy Policy</a>
+        <a href="app-ads.txt" target="_blank">app-ads.txt</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-content">
+          <div class="hero-badge">🚀 Official Release</div>
+          <h1>GALACTIC MERGE: SPACE TYCOON</h1>
+          <p>
+            Merge futuristic starships, conquer high-speed cosmic circuits, harness Dark Matter expeditions, and build an astronomical idle space fleet!
+          </p>
+          <div class="cta-group">
+            <a href="https://play.google.com/store/apps/details?id=com.sarankar.galacticgame" target="_blank" rel="noopener" class="btn-primary">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3,20.5V3.5C3,2.91 3.34,2.39 3.84,2.15L13.69,12L3.84,21.85C3.34,21.6 3,21.09 3,20.5M16.81,15.12L6.05,21.34L14.54,12.85L16.81,15.12M20.16,10.81C20.5,11.08 20.75,11.5 20.75,12C20.75,12.5 20.53,12.9 20.18,13.18L17.89,14.5L15.39,12L17.89,9.5L20.16,10.81M6.05,2.66L16.81,8.88L14.54,11.15L6.05,2.66Z"/></svg>
+              Get on Google Play
+            </a>
+            <a href="privacy_policy.html" class="btn-secondary">
+              Privacy Policy
+            </a>
+          </div>
+        </div>
+
+        <div class="hero-graphic">
+          <img src="feature_graphic_1024x500.png" alt="Galactic Merge Gameplay Showcase">
+        </div>
+      </section>
+
+      <section id="features">
+        <h2 class="section-title">GAME HIGHLIGHTS</h2>
+        <div class="grid">
+          <div class="card">
+            <div class="card-icon">🛸</div>
+            <h3>40+ Starships</h3>
+            <p>Drag and combine identical spaceships to discover legendary tier starfighters, battlecruisers, and warp-drive motherships.</p>
+          </div>
+          <div class="card">
+            <div class="card-icon">⚡</div>
+            <h3>Orbital Racing</h3>
+            <p>Deploy your fleet onto glowing laser racetracks to generate massive credits per second as ships zip through speed gates.</p>
+          </div>
+          <div class="card">
+            <div class="card-icon">🌌</div>
+            <h3>Dark Matter Tech</h3>
+            <p>Launch deep space expeditions, gather rare cosmic elements, and research game-changing prestige mastery perks.</p>
+          </div>
+          <div class="card">
+            <div class="card-icon">💰</div>
+            <h3>2X Offline Profits</h3>
+            <p>Your fleet keeps racing 24/7. Collect astronomical idle rewards whenever you return, with 100% offline play supported.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="studio-box">
+        <div>
+          <h2>Sarankar Developers</h2>
+          <p>Crafting captivating, high-performance mobile gaming experiences across the galaxy.</p>
+          <p style="margin-top: 6px;">Contact: <a href="mailto:yash.sarankar@gmail.com" style="color: var(--neon-cyan); text-decoration: none;">yash.sarankar@gmail.com</a></p>
+        </div>
+        <div>
+          <a href="mailto:yash.sarankar@gmail.com" class="btn-secondary">Contact Support</a>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div>&copy; 2026 Sarankar Developers. All rights reserved.</div>
+      <div class="footer-links">
+        <a href="privacy_policy.html">Privacy Policy</a>
+        <a href="app-ads.txt">app-ads.txt</a>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    // Subtle twinkling stars animation
+    const canvas = document.getElementById('stars-canvas');
+    const ctx = canvas.getContext('2d');
+    let stars = [];
+
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      stars = Array.from({ length: 120 }, () => ({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        radius: Math.random() * 1.5 + 0.5,
+        alpha: Math.random(),
+        speed: Math.random() * 0.015 + 0.005
+      }));
+    }
+
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const s of stars) {
+        s.alpha += s.speed;
+        if (s.alpha > 1 || s.alpha < 0) s.speed = -s.speed;
+        ctx.fillStyle = `rgba(180, 220, 255, ${Math.abs(s.alpha)})`;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      requestAnimationFrame(render);
+    }
+
+    window.addEventListener('resize', resize);
+    resize();
+    render();
+  </script>
+</body>
+</html>

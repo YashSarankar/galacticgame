@@ -138,8 +138,8 @@ void main() {
       final result = StorageService.calculateOfflineEarnings(state);
 
       expect(result.elapsedSeconds, closeTo(36000, 5));
-      // Base cap is 2 hours = 7200s
-      expect(result.cappedSeconds, 7200);
+      // Base cap is 4 hours = 14400s
+      expect(result.cappedSeconds, 14400);
       expect(result.coinsEarned > 0, true);
     });
   });
@@ -1330,6 +1330,34 @@ void main() {
       // Run auto-merge
       final mergedCount = notifier.autoMergeGrid();
       expect(mergedCount > 0, true);
+    });
+
+    test('Galactic Prestige Reset: Tier and buy cost reset correctly without softlock', () {
+      final state = GameState.initial().copyWith(
+        highestTierUnlocked: 13,
+        credits: 10000000.0,
+        lifetimeCredits: 10000000.0,
+        darkMatter: 50.0,
+        totalShipsPurchased: 120,
+      );
+
+      final notifier = GameEconomyNotifier(state);
+      expect(notifier.activeStoreBuyTier, 12);
+      expect(notifier.nextShipBuyCost > 100000.0, true);
+
+      // Perform Prestige Reset
+      notifier.performGalacticPrestige(doubleYield: false);
+
+      expect(notifier.state.career.prestigeCount, 1);
+      expect(notifier.state.highestTierUnlocked, 1);
+      expect(notifier.state.credits, 250.0);
+      expect(notifier.state.darkMatter > 50.0, true);
+      expect(notifier.state.totalShipsPurchased, 0);
+
+      // Buy cost must be affordable with starting 250 credits
+      expect(notifier.nextShipBuyCost, lessThanOrEqualTo(250.0));
+      final canBuy = notifier.purchaseShip();
+      expect(canBuy, true);
     });
   });
 }

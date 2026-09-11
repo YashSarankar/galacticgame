@@ -1022,6 +1022,7 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
       lifetimeCredits: 250.0,
       darkMatter: state.darkMatter + actualDarkMatterEarned,
       totalShipsPurchased: 0,
+      highestTierUnlocked: starterTier,
       gridSlots: freshSlots,
       trackShips: [ShipModel.create(starterTier)],
       career: state.career.copyWith(

@@ -783,8 +783,56 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
   Widget build(BuildContext context) {
     _checkOfflineEarningsOnStartup(ref);
 
-    // Listen for boss defeat to celebrate victory
+    // Listen for boss spawn & defeat events
     ref.listen(gameStateProvider, (prev, next) {
+      // Boss Incursion Warning Alert
+      if (prev != null && prev.activeBoss == null && next.activeBoss != null) {
+        final boss = next.activeBoss!;
+        HapticFeedback.heavyImpact();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFF1E0A1E),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: const BorderSide(color: Color(0xFFFF0055), width: 1.8),
+            ),
+            content: Row(
+              children: [
+                const Text('🚨', style: TextStyle(fontSize: 22)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'WARNING: ${boss.name.toUpperCase()} HAS SPAWNED!',
+                        style: const TextStyle(
+                          color: Color(0xFFFF0055),
+                          fontWeight: FontWeight.w900,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const Text(
+                        'Tap the Dreadnought to strike with your fleet!',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+
+      // Boss Defeat Supernova Celebration
       if (prev != null && prev.activeBoss != null && next.activeBoss == null) {
         if (prev.activeBoss!.currentHealth <= 0 || prev.activeBoss!.isDead) {
           final boss = prev.activeBoss!;

@@ -38,7 +38,7 @@ class ExpeditionSector {
       iconAsset: 'assets/kenney_space-shooter-remastered/PNG/Meteors/meteorBrown_med1.png',
       minShipTier: 1,
       durationSeconds: 300, // 5 minutes
-      baseCreditsMultiplier: 60.0,
+      baseCreditsMultiplier: 100.0,
       darkMatterReward: 0.0,
       relicShardsReward: 0,
       hazardRating: 'EASY',
@@ -51,9 +51,9 @@ class ExpeditionSector {
       iconAsset: 'assets/kenney_space-shooter-remastered/PNG/Meteors/meteorGrey_med1.png',
       minShipTier: 3,
       durationSeconds: 900, // 15 minutes
-      baseCreditsMultiplier: 250.0,
-      darkMatterReward: 1.0,
-      relicShardsReward: 2,
+      baseCreditsMultiplier: 450.0,
+      darkMatterReward: 2.0,
+      relicShardsReward: 3,
       hazardRating: 'NORMAL',
       sectorColorValue: 0xFF06D6A0, // Emerald Green
     ),
@@ -64,12 +64,26 @@ class ExpeditionSector {
       iconAsset: 'assets/kenney_space-shooter-remastered/PNG/Enemies/enemyBlack1.png',
       minShipTier: 6,
       durationSeconds: 3600, // 1 hour
-      baseCreditsMultiplier: 1200.0,
-      darkMatterReward: 8.0,
-      relicShardsReward: 6,
+      baseCreditsMultiplier: 2500.0,
+      darkMatterReward: 12.0,
+      relicShardsReward: 8,
       bonusBlueprintTier: 4,
       hazardRating: 'HARD',
       sectorColorValue: 0xFF9D4EDD, // Violet Purple
+    ),
+    ExpeditionSector(
+      id: 'sector_centauri',
+      name: 'Centauri Supercluster (2 Hours)',
+      description: '2-hour expedition with massive credit yield and relic shards.',
+      iconAsset: 'assets/kenney_space-shooter-remastered/PNG/Enemies/enemyBlue1.png',
+      minShipTier: 8,
+      durationSeconds: 7200, // 2 hours
+      baseCreditsMultiplier: 6500.0,
+      darkMatterReward: 22.0,
+      relicShardsReward: 12,
+      bonusBlueprintTier: 6,
+      hazardRating: 'SEVERE',
+      sectorColorValue: 0xFFFFB703, // Amber Gold
     ),
     ExpeditionSector(
       id: 'sector_sirius',
@@ -78,9 +92,9 @@ class ExpeditionSector {
       iconAsset: 'assets/kenney_space-shooter-remastered/PNG/Enemies/enemyRed1.png',
       minShipTier: 10,
       durationSeconds: 14400, // 4 hours
-      baseCreditsMultiplier: 8000.0,
-      darkMatterReward: 30.0,
-      relicShardsReward: 15,
+      baseCreditsMultiplier: 15000.0,
+      darkMatterReward: 40.0,
+      relicShardsReward: 20,
       bonusBlueprintTier: 8,
       hazardRating: 'EXPERT',
       sectorColorValue: 0xFFFF0055, // Crimson Neon

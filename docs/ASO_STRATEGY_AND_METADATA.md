@@ -9,7 +9,7 @@
 | :--- | :--- | :--- |
 | **App Title** | 30 chars | `Galactic Merge: Space Tycoon` *(28 chars)* |
 | **Short Description** | 80 chars | `Merge futuristic starships, conquer cosmic circuits & build an idle space fleet!` *(80 chars)* |
-| **Privacy Policy URL** | URL | `https://sites.google.com/view/galacticmergeprivacypolicy/home` |
+| **Privacy Policy URL** | URL | `https://yashsarankar.github.io/privacy_policy.html` |
 
 ### Full Description (Google Play - 4,000 Chars Formatted)
 ```markdown

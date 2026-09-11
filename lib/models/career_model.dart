@@ -91,6 +91,47 @@ class CareerModel {
   }
 
   factory CareerModel.fromJson(Map<String, dynamic> json) {
+    final initialMissions = MissionModel.getInitialMissions();
+    final List<MissionModel> loadedMissions;
+    if (json['missions'] == null) {
+      loadedMissions = initialMissions;
+    } else {
+      final savedMissions = (json['missions'] as List)
+          .map((m) => MissionModel.fromJson(m as Map<String, dynamic>))
+          .toList();
+      final savedMap = {for (var m in savedMissions) m.id: m};
+      loadedMissions = initialMissions.map((base) {
+        if (savedMap.containsKey(base.id)) {
+          final saved = savedMap[base.id]!;
+          return base.copyWith(
+            currentProgress: saved.currentProgress,
+            isClaimed: saved.isClaimed,
+          );
+        }
+        return base;
+      }).toList();
+    }
+
+    final initialSkills = SkillNodeModel.getInitialSkills();
+    final List<SkillNodeModel> loadedSkills;
+    if (json['skills'] == null) {
+      loadedSkills = initialSkills;
+    } else {
+      final savedSkills = (json['skills'] as List)
+          .map((s) => SkillNodeModel.fromJson(s as Map<String, dynamic>))
+          .toList();
+      final savedMap = {for (var s in savedSkills) s.id: s};
+      loadedSkills = initialSkills.map((base) {
+        if (savedMap.containsKey(base.id)) {
+          final saved = savedMap[base.id]!;
+          return base.copyWith(
+            level: saved.level,
+          );
+        }
+        return base;
+      }).toList();
+    }
+
     return CareerModel(
       sectorLevel: json['sectorLevel'] as int? ?? 1,
       sectorName: json['sectorName'] as String? ?? getSectorTitle(1),
@@ -99,16 +140,8 @@ class CareerModel {
       totalWheelSpins: json['totalWheelSpins'] as int? ?? 0,
       totalExpeditionsCompleted:
           json['totalExpeditionsCompleted'] as int? ?? 0,
-      missions: json['missions'] != null
-          ? (json['missions'] as List)
-              .map((m) => MissionModel.fromJson(m as Map<String, dynamic>))
-              .toList()
-          : MissionModel.getInitialMissions(),
-      skills: json['skills'] != null
-          ? (json['skills'] as List)
-              .map((s) => SkillNodeModel.fromJson(s as Map<String, dynamic>))
-              .toList()
-          : SkillNodeModel.getInitialSkills(),
+      missions: loadedMissions,
+      skills: loadedSkills,
     );
   }
 }

@@ -137,8 +137,8 @@ class StorageService {
       ),
     );
 
-    final double baseOfflineHours = state.hasRemovedAds ? 6.0 : 2.0;
-    final double maxOfflineHours = baseOfflineHours + (offlineSkill.level * 1.0); // 2h base for Cadets, 6h for VIP (up to 17h with maxed skills)
+    final double baseOfflineHours = state.hasRemovedAds ? 8.0 : 4.0;
+    final double maxOfflineHours = baseOfflineHours + offlineSkill.currentBonusValue; // 4h base for Cadets, 8h for VIP (up to 26h with maxed skills)
     final int maxOfflineCapSeconds = (maxOfflineHours * 3600).round();
     final int cappedSeconds = min(elapsedSeconds, maxOfflineCapSeconds);
 

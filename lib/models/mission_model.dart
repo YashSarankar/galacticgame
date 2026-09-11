@@ -190,6 +190,50 @@ class MissionModel {
         rewardCoins: 12000,
         rewardDarkMatter: 50,
       ),
+      // Mid-tier milestone: Tier 7 Void Destroyer
+      const MissionModel(
+        id: 'm8_tier_7',
+        title: 'Battleship Commander',
+        description: 'Unlock a Tier 7 Void Destroyer',
+        type: MissionType.unlockTier,
+        targetValue: 7,
+        currentProgress: 1,
+        rewardCoins: 35000,
+        rewardDarkMatter: 75,
+      ),
+      // Mid-tier sustained orbit milestone
+      const MissionModel(
+        id: 'm9_cross_5000',
+        title: 'Cosmic Voyager',
+        description: 'Cross the income line 5,000 times',
+        type: MissionType.crossCount,
+        targetValue: 5000,
+        currentProgress: 0,
+        rewardCoins: 75000,
+        rewardDarkMatter: 100,
+      ),
+      // High-tier milestone: Tier 9 Nebula Dreadnought
+      const MissionModel(
+        id: 'm10_tier_9',
+        title: 'Dreadnought Dominion',
+        description: 'Unlock a Tier 9 Nebula Dreadnought',
+        type: MissionType.unlockTier,
+        targetValue: 9,
+        currentProgress: 1,
+        rewardCoins: 150000,
+        rewardDarkMatter: 150,
+      ),
+      // Climax milestone: Tier 10 Galactic Titan
+      const MissionModel(
+        id: 'm11_tier_10',
+        title: 'Titan Ascendant',
+        description: 'Unlock a Tier 10 Galactic Titan',
+        type: MissionType.unlockTier,
+        targetValue: 10,
+        currentProgress: 1,
+        rewardCoins: 300000,
+        rewardDarkMatter: 250,
+      ),
     ];
   }
 }
