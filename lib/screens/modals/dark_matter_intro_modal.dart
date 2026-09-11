@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 /// Celebratory Introduction Modal for Dark Matter Discovery and Quantum Tech Tree Unlock (Tier 3).
 class DarkMatterIntroModal extends StatefulWidget {
   final VoidCallback onOpenTechTree;
+  final VoidCallback? onDismiss;
 
   const DarkMatterIntroModal({
     super.key,
     required this.onOpenTechTree,
+    this.onDismiss,
   });
 
   @override
@@ -197,7 +199,10 @@ class _DarkMatterIntroModalState extends State<DarkMatterIntroModal>
 
             // 5. Dismiss Text Button
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () {
+                Navigator.of(context).pop();
+                widget.onDismiss?.call();
+              },
               child: const Text(
                 'Continue to Fleet Hangar',
                 style: TextStyle(

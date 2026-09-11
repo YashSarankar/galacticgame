@@ -226,25 +226,23 @@ class UserGrowthService {
       case GameFeature.dailyCalendar:
       case GameFeature.autoSort:
       case GameFeature.techTree:
-        return 3; // Tier 3 (Daily habits, hangar auto-sort & Dark Matter Tech Tree)
+      case GameFeature.achievements:
+      case GameFeature.expeditions:
+        return 3; // Tier 3 (Dark Matter Tech Tree, Trophies, Expeditions & Daily Drops)
       case GameFeature.multiLaserGates:
-        return 4; // Tier 4 (Multi-gate circuit payouts)
-      case GameFeature.hyperPads:
       case GameFeature.roulette:
-        return 5; // Tier 5 (Speed pads & lucky wheel)
+        return 4; // Tier 4 (Multi-gate circuit payouts & Lucky Wheel)
+      case GameFeature.hyperPads:
+      case GameFeature.cosmicStore:
+        return 5; // Tier 5 (Speed pads & Item Shop)
       case GameFeature.autoMerge:
         return 6; // Tier 6 (Earned Auto-Merge Superpower)
+      case GameFeature.relics:
+        return 7; // Tier 7 (Ancient Relics Vault)
       case GameFeature.trackEvolution:
         return 8; // Tier 8 (Track Evolution into figure-8 & pulsar)
-      case GameFeature.achievements:
-        return 9; // Tier 9 (Milestone Trophies)
       case GameFeature.bossBeacon:
-        return 10; // Tier 10 (Boss Incursions)
-      case GameFeature.relics:
-      case GameFeature.expeditions:
-        return 11; // Tier 11 (Relics & Constellation Expeditions)
-      case GameFeature.cosmicStore:
-        return 12; // Tier 12 (Cosmic VIP Store)
+        return 10; // Tier 10 (Alien Boss Incursions)
       case GameFeature.prestige:
         return 13; // Tier 13 (Galactic Prestige Reset or 5M lifetime credits)
     }
@@ -405,7 +403,7 @@ class UserGrowthService {
           description: 'Spin the spatial singularity wheel for instant jackpot credit, gem, and boost bounties.',
           icon: Icons.blur_circular_rounded,
           color: Color(0xFF00F5FF),
-          requiredTier: 5,
+          requiredTier: 4,
           location: 'Command Hub > Free Gifts & Shop',
           actionLabel: 'SPIN WHEEL',
           howItWorks:
@@ -493,7 +491,7 @@ class UserGrowthService {
           description: 'Complete lifetime career objectives to claim massive Dark Matter gem bounties and prestige medals.',
           icon: Icons.emoji_events_rounded,
           color: Color(0xFFFFD700),
-          requiredTier: 9,
+          requiredTier: 3,
           location: 'Command Hub > Upgrades & Trophies',
           actionLabel: 'VIEW TROPHIES',
           howItWorks:
@@ -537,7 +535,7 @@ class UserGrowthService {
           description: 'Socket mysterious alien artifacts into your command matrix for permanent game-changing multipliers.',
           icon: Icons.auto_awesome_rounded,
           color: Color(0xFFBD00FF),
-          requiredTier: 11,
+          requiredTier: 7,
           location: 'Command Hub > Artifacts Vault',
           actionLabel: 'VIEW RELICS',
           howItWorks:
@@ -559,7 +557,7 @@ class UserGrowthService {
           description: 'Deploy idle spacecraft on deep space missions to recover ancient relic shards and rare materials.',
           icon: Icons.travel_explore_rounded,
           color: Color(0xFF00F0FF),
-          requiredTier: 11,
+          requiredTier: 3,
           location: 'Command Hub > Treasure Hunts',
           actionLabel: 'START EXPEDITIONS',
           howItWorks:
@@ -581,7 +579,7 @@ class UserGrowthService {
           description: 'Purchase time-warps, permanent quantum boosters, and automated AI drone licenses.',
           icon: Icons.storefront_rounded,
           color: Color(0xFFFF9900),
-          requiredTier: 12,
+          requiredTier: 5,
           location: 'Command Hub > Item Shop',
           actionLabel: 'VISIT STORE',
           howItWorks:
@@ -637,7 +635,7 @@ class UserGrowthService {
       title: 'First Flight Fusion',
       objective: 'Merge two Novice Interceptors into a Tier 2 Vanguard Scout.',
       icon: Icons.merge_type_rounded,
-      rewardCredits: 1000.0,
+      rewardCredits: 150.0,
       rewardDarkMatter: 0.0,
       checkCompleted: (state) => state.highestTierUnlocked >= 2,
     ),
@@ -646,7 +644,7 @@ class UserGrowthService {
       title: 'Engine Overclock',
       objective: 'Upgrade Fleet Engine Speed to Level 2 in the Circuit Engineering Bar.',
       icon: Icons.speed_rounded,
-      rewardCredits: 2000.0,
+      rewardCredits: 300.0,
       rewardDarkMatter: 0.0,
       checkCompleted: (state) => state.fleetSpeedLevel >= 2,
     ),
@@ -655,8 +653,8 @@ class UserGrowthService {
       title: 'Dark Matter Breakthrough',
       objective: 'Reach Spacecraft Tier 3 to unlock Dark Matter Gems, Tech Tree & Daily Drops.',
       icon: Icons.diamond_rounded,
-      rewardCredits: 5000.0,
-      rewardDarkMatter: 15.0,
+      rewardCredits: 800.0,
+      rewardDarkMatter: 10.0,
       checkCompleted: (state) => state.highestTierUnlocked >= 3,
     ),
     LearningMilestoneQuest(
@@ -664,7 +662,7 @@ class UserGrowthService {
       title: 'Multi-Laser Checkpoint',
       objective: 'Reach Tier 4 and construct the 2nd Laser Finish Gate to double lap payouts.',
       icon: Icons.flag_rounded,
-      rewardCredits: 6000.0,
+      rewardCredits: 1500.0,
       rewardDarkMatter: 15.0,
       checkCompleted: (state) =>
           state.highestTierUnlocked >= 4 && state.finishLinesCount >= 2,
@@ -674,7 +672,7 @@ class UserGrowthService {
       title: 'Hyperspace Acceleration',
       objective: 'Reach Tier 5 to unlock On-Track Hyper-Pads & Wormhole Singularity Roulette.',
       icon: Icons.rocket_launch_rounded,
-      rewardCredits: 15000.0,
+      rewardCredits: 3000.0,
       rewardDarkMatter: 20.0,
       checkCompleted: (state) => state.highestTierUnlocked >= 5,
     ),
@@ -683,8 +681,8 @@ class UserGrowthService {
       title: 'Automated Logistics',
       objective: 'Reach Tier 6 to unlock the golden 1-Tap Auto-Merge Superpower.',
       icon: Icons.auto_awesome_rounded,
-      rewardCredits: 35000.0,
-      rewardDarkMatter: 30.0,
+      rewardCredits: 6000.0,
+      rewardDarkMatter: 25.0,
       checkCompleted: (state) => state.highestTierUnlocked >= 6,
     ),
     LearningMilestoneQuest(
@@ -692,8 +690,8 @@ class UserGrowthService {
       title: 'Quantum Research Matrix',
       objective: 'Reach Tier 7 to unlock the Dark Matter Quantum Tech Tree.',
       icon: Icons.account_tree_rounded,
-      rewardCredits: 75000.0,
-      rewardDarkMatter: 40.0,
+      rewardCredits: 12000.0,
+      rewardDarkMatter: 30.0,
       checkCompleted: (state) => state.highestTierUnlocked >= 7,
     ),
     LearningMilestoneQuest(
@@ -701,8 +699,8 @@ class UserGrowthService {
       title: 'Circuit Ascension',
       objective: 'Reach Tier 8 and evolve the Racetrack into an advanced geometric circuit.',
       icon: Icons.shape_line_rounded,
-      rewardCredits: 150000.0,
-      rewardDarkMatter: 50.0,
+      rewardCredits: 25000.0,
+      rewardDarkMatter: 40.0,
       checkCompleted: (state) =>
           state.highestTierUnlocked >= 8 && state.circuitTier >= 2,
     ),
@@ -711,8 +709,8 @@ class UserGrowthService {
       title: 'Orbital Strike Command',
       objective: 'Reach Tier 10 and summon an Alien Dreadnought Boss via the Battle Beacon.',
       icon: Icons.military_tech_rounded,
-      rewardCredits: 300000.0,
-      rewardDarkMatter: 75.0,
+      rewardCredits: 50000.0,
+      rewardDarkMatter: 50.0,
       checkCompleted: (state) =>
           state.highestTierUnlocked >= 10 &&
           (state.activeBoss != null || state.totalLineCrossings >= 200),
@@ -722,8 +720,8 @@ class UserGrowthService {
       title: 'Trans-Dimensional Singularity',
       objective: 'Reach Tier 13 (or 5M Lifetime Credits) to perform your first Galactic Prestige Reset.',
       icon: Icons.all_inclusive_rounded,
-      rewardCredits: 1000000.0,
-      rewardDarkMatter: 150.0,
+      rewardCredits: 100000.0,
+      rewardDarkMatter: 100.0,
       checkCompleted: (state) =>
           state.highestTierUnlocked >= 13 || state.lifetimeCredits >= 5000000.0,
     ),

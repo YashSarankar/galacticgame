@@ -121,7 +121,7 @@ class MissionModel {
         type: MissionType.mergeCount,
         targetValue: 30,
         currentProgress: 0,
-        rewardCoins: 2500,
+        rewardCoins: 250,
         rewardDarkMatter: 0,
       ),
       // 200 crossings = roughly 5–10 mins of active play with a small fleet
@@ -132,7 +132,7 @@ class MissionModel {
         type: MissionType.crossCount,
         targetValue: 200,
         currentProgress: 0,
-        rewardCoins: 8000,
+        rewardCoins: 500,
         rewardDarkMatter: 0,
       ),
       // Requires earning enough to unlock T3 — introduces Dark Matter!
@@ -143,7 +143,7 @@ class MissionModel {
         type: MissionType.unlockTier,
         targetValue: 3,
         currentProgress: 1,
-        rewardCoins: 15000,
+        rewardCoins: 1000,
         rewardDarkMatter: 10,
       ),
       // Buying 30 ships means repeated trips to shipyard over many sessions
@@ -154,7 +154,7 @@ class MissionModel {
         type: MissionType.buyShipCount,
         targetValue: 30,
         currentProgress: 0,
-        rewardCoins: 25000,
+        rewardCoins: 2000,
         rewardDarkMatter: 12,
       ),
       // 1000 crossings = solid idle progression milestone
@@ -165,7 +165,7 @@ class MissionModel {
         type: MissionType.crossCount,
         targetValue: 1000,
         currentProgress: 0,
-        rewardCoins: 75000,
+        rewardCoins: 4000,
         rewardDarkMatter: 20,
       ),
       // Reaching T5 requires significant fleet building and coin accumulation
@@ -176,8 +176,8 @@ class MissionModel {
         type: MissionType.unlockTier,
         targetValue: 5,
         currentProgress: 1,
-        rewardCoins: 200000,
-        rewardDarkMatter: 40,
+        rewardCoins: 6000,
+        rewardDarkMatter: 30,
       ),
       // 100 merges is a long-term mastery goal
       const MissionModel(
@@ -187,8 +187,8 @@ class MissionModel {
         type: MissionType.mergeCount,
         targetValue: 100,
         currentProgress: 0,
-        rewardCoins: 500000,
-        rewardDarkMatter: 75,
+        rewardCoins: 12000,
+        rewardDarkMatter: 50,
       ),
     ];
   }

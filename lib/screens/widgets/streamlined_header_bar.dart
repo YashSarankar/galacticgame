@@ -14,6 +14,7 @@ class StreamlinedHeaderBar extends StatelessWidget {
   final Animation<double> coinBounceAnimation;
   final VoidCallback onOpenMembership;
   final VoidCallback onOpenSettings;
+  final VoidCallback? onOpenTechTree;
 
   const StreamlinedHeaderBar({
     super.key,
@@ -24,6 +25,7 @@ class StreamlinedHeaderBar extends StatelessWidget {
     required this.coinBounceAnimation,
     required this.onOpenMembership,
     required this.onOpenSettings,
+    this.onOpenTechTree,
   });
 
   @override
@@ -142,71 +144,78 @@ class StreamlinedHeaderBar extends StatelessWidget {
           ),
           if (isDarkMatterUnlocked) ...[
             const SizedBox(width: 6),
-            // 2. Dark Matter Pill (Hard Currency)
+            // 2. Dark Matter Pill (Hard Currency - tap to open Tech Tree)
             Expanded(
               flex: 4,
-              child: Container(
-                key: darkMatterCounterKey,
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      GameTheme.neonPurple.withAlpha(45),
-                      const Color(0xFF190C28),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: GameTheme.neonPurple.withAlpha(100),
-                    width: 1.0,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(3),
-                      decoration: BoxDecoration(
-                        color: GameTheme.neonPurple.withAlpha(50),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.diamond_rounded,
-                        color: GameTheme.neonPurple,
-                        size: 14,
-                      ),
-                    ),
-                    const SizedBox(width: 5),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            NumberFormatter.formatDarkMatter(state.darkMatter),
-                            style: const TextStyle(
-                              color: GameTheme.neonPurple,
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 0.2,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const Text(
-                            'DARK MATTER',
-                            style: TextStyle(
-                              color: Colors.white38,
-                              fontSize: 7.0,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.3,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                  onTap: onOpenTechTree,
+                  child: Container(
+                    key: darkMatterCounterKey,
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          GameTheme.neonPurple.withAlpha(45),
+                          const Color(0xFF190C28),
                         ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: GameTheme.neonPurple.withAlpha(100),
+                        width: 1.0,
                       ),
                     ),
-                  ],
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(3),
+                          decoration: BoxDecoration(
+                            color: GameTheme.neonPurple.withAlpha(50),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.diamond_rounded,
+                            color: GameTheme.neonPurple,
+                            size: 14,
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                NumberFormatter.formatDarkMatter(state.darkMatter),
+                                style: const TextStyle(
+                                  color: GameTheme.neonPurple,
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.2,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const Text(
+                                'DARK MATTER',
+                                style: TextStyle(
+                                  color: Colors.white38,
+                                  fontSize: 7.0,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.3,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),

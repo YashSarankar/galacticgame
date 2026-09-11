@@ -123,11 +123,7 @@ class MissionsModal extends ConsumerWidget {
                   final bool isDone = mission.isCompleted;
                   final bool isClaimed = mission.isClaimed;
 
-                  final double tierScale =
-                      pow(1.5, max(0, gameState.highestTierUnlocked - 1))
-                          .toDouble();
                   final double dynamicReward = (mission.rewardCoins *
-                          tierScale *
                           ref.read(gameStateProvider.notifier).relicIncomeMultiplier)
                       .floorToDouble();
 

@@ -685,9 +685,19 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
       final double tutorialMergeGrant =
           state.tutorialStep == 3 ? 150.0 : 0.0;
 
+      final double discoveryBountyCredits = (isNewDiscovery && newTier > 1)
+          ? (ShipModel.calculatePurchaseCost(0, newTier) * 0.50).floorToDouble()
+          : 0.0;
+      final double discoveryBountyDm =
+          (isNewDiscovery && newTier >= 3) ? (newTier * 2.0) : 0.0;
+
+      final double totalCreditsGained =
+          tutorialMergeGrant + discoveryBountyCredits;
+
       state = state.copyWith(
-        credits: state.credits + tutorialMergeGrant,
-        lifetimeCredits: state.lifetimeCredits + tutorialMergeGrant,
+        credits: state.credits + totalCreditsGained,
+        lifetimeCredits: state.lifetimeCredits + totalCreditsGained,
+        darkMatter: state.darkMatter + discoveryBountyDm,
         gridSlots: newSlots,
         trackShips: computeTrackFleet(newSlots),
         totalMergesCount: newMergeCount,
@@ -977,11 +987,8 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     final updatedMissions = List<MissionModel>.from(state.career.missions);
     updatedMissions[index] = updatedMission;
 
-    // Scale awarded coins dynamically with player's highest unlocked spacecraft tier
-    final double tierScale =
-        pow(1.5, max(0, state.highestTierUnlocked - 1)).toDouble();
     final double awardedCredits =
-        mission.rewardCoins * tierScale * relicIncomeMultiplier;
+        mission.rewardCoins * relicIncomeMultiplier;
 
     state = state.copyWith(
       credits: state.credits + awardedCredits,
@@ -1305,7 +1312,7 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
               sum +
               (s.calculateIncomePayout() * (s.baseSpeed / approxTrackLength)),
         );
-        final double effectivePerSec = max(10.0, totalFleetPerSec);
+        final double effectivePerSec = max(0.24, totalFleetPerSec);
         final double warpEarnings =
             effectivePerSec * reward.count * relicIncomeMultiplier;
         state = state.copyWith(
@@ -1405,7 +1412,7 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
     // Base income per lap reference from active fleet
     final double baseFleetIncome = state.trackShips.isNotEmpty
         ? state.trackShips.first.calculateIncomePayout()
-        : 50.0;
+        : 4.0;
 
     // Assigned ship tier bonus: higher tier ships multiply the bounty!
     final double tierMultiplier =
@@ -1510,7 +1517,7 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
         doubleWithAd ? 2.0 : (multiplier > 1.0 ? multiplier : 1.0);
     // Scale daily credits dynamically with current fleet progression
     final double tierMultiplier =
-        pow(1.6, max(0, state.highestTierUnlocked - 1)).toDouble();
+        1.0 + (max(0, state.highestTierUnlocked - 1) * 0.35);
 
     final double addedCredits =
         reward.creditsReward * effectiveMultiplier * relicIncomeMultiplier * tierMultiplier;
@@ -1571,7 +1578,7 @@ class GameEconomyNotifier extends StateNotifier<GameState> {
               sum +
               (s.calculateIncomePayout() * (s.baseSpeed / approxTrackLength)),
         );
-        final double effectivePerSec = max(10.0, totalFleetPerSec);
+        final double effectivePerSec = max(0.24, totalFleetPerSec);
         final double warpEarnings = effectivePerSec *
             (item.warpDurationHours * 3600) *
             relicIncomeMultiplier *

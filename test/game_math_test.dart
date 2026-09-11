@@ -794,39 +794,35 @@ void main() {
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.codex, highestTier: 2), true);
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.autoSort, highestTier: 2), false);
 
-      // Tier 3: Daily Calendar, Auto-Sort & Tech Tree
+      // Tier 3: Daily Calendar, Auto-Sort, Tech Tree, Trophies & Expeditions
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.dailyCalendar, highestTier: 3), true);
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.autoSort, highestTier: 3), true);
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.techTree, highestTier: 3), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.achievements, highestTier: 3), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.expeditions, highestTier: 3), true);
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.multiLaserGates, highestTier: 3), false);
 
-      // Tier 4: Multi-Laser Gates
+      // Tier 4: Multi-Laser Gates & Roulette
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.multiLaserGates, highestTier: 4), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.roulette, highestTier: 4), true);
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.hyperPads, highestTier: 4), false);
 
-      // Tier 5: Hyper-Pads & Roulette
+      // Tier 5: Hyper-Pads & Cosmic Store
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.hyperPads, highestTier: 5), true);
-      expect(UserGrowthService.isFeatureUnlocked(GameFeature.roulette, highestTier: 5), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.cosmicStore, highestTier: 5), true);
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.autoMerge, highestTier: 5), false);
 
       // Tier 6: Auto-Merge Superpower
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.autoMerge, highestTier: 6), true);
 
+      // Tier 7: Relics Vault
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.relics, highestTier: 7), true);
+
       // Tier 8: Track Evolution
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.trackEvolution, highestTier: 8), true);
 
-      // Tier 9: Achievements
-      expect(UserGrowthService.isFeatureUnlocked(GameFeature.achievements, highestTier: 9), true);
-
       // Tier 10: Boss Beacon
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.bossBeacon, highestTier: 10), true);
-
-      // Tier 11: Relics & Expeditions
-      expect(UserGrowthService.isFeatureUnlocked(GameFeature.relics, highestTier: 11), true);
-      expect(UserGrowthService.isFeatureUnlocked(GameFeature.expeditions, highestTier: 11), true);
-
-      // Tier 12: Cosmic Store
-      expect(UserGrowthService.isFeatureUnlocked(GameFeature.cosmicStore, highestTier: 12), true);
 
       // Tier 13+: Prestige
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.prestige, highestTier: 13), true);
@@ -994,39 +990,35 @@ void main() {
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.codex, highestTier: 2), true);
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.dailyCalendar, highestTier: 2), false);
 
-      // Tier 3: Daily Calendar, Auto-Sort & Tech Tree unlocked
+      // Tier 3: Daily Calendar, Auto-Sort, Tech Tree, Achievements & Expeditions unlocked
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.dailyCalendar, highestTier: 3), true);
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.autoSort, highestTier: 3), true);
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.techTree, highestTier: 3), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.achievements, highestTier: 3), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.expeditions, highestTier: 3), true);
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.multiLaserGates, highestTier: 3), false);
 
-      // Tier 4: Multi-Laser Gates unlocked
+      // Tier 4: Multi-Laser Gates & Roulette unlocked
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.multiLaserGates, highestTier: 4), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.roulette, highestTier: 4), true);
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.hyperPads, highestTier: 4), false);
 
-      // Tier 5: Hyper-Pads & Roulette unlocked
+      // Tier 5: Hyper-Pads & Cosmic Store unlocked
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.hyperPads, highestTier: 5), true);
-      expect(UserGrowthService.isFeatureUnlocked(GameFeature.roulette, highestTier: 5), true);
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.cosmicStore, highestTier: 5), true);
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.autoMerge, highestTier: 5), false);
 
       // Tier 6: Auto-Merge unlocked
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.autoMerge, highestTier: 6), true);
 
+      // Tier 7: Ancient Relics unlocked
+      expect(UserGrowthService.isFeatureUnlocked(GameFeature.relics, highestTier: 7), true);
+
       // Tier 8: Track Evolution unlocked
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.trackEvolution, highestTier: 8), true);
 
-      // Tier 9: Milestone Trophies (Achievements) unlocked
-      expect(UserGrowthService.isFeatureUnlocked(GameFeature.achievements, highestTier: 9), true);
-
       // Tier 10: Boss Beacon unlocked
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.bossBeacon, highestTier: 10), true);
-
-      // Tier 11: Relics & Expeditions unlocked
-      expect(UserGrowthService.isFeatureUnlocked(GameFeature.relics, highestTier: 11), true);
-      expect(UserGrowthService.isFeatureUnlocked(GameFeature.expeditions, highestTier: 11), true);
-
-      // Tier 12: Cosmic Store unlocked
-      expect(UserGrowthService.isFeatureUnlocked(GameFeature.cosmicStore, highestTier: 12), true);
 
       // Tier 13: Prestige unlocked
       expect(UserGrowthService.isFeatureUnlocked(GameFeature.prestige, highestTier: 13), true);
@@ -1048,7 +1040,7 @@ void main() {
       final claimed = notifier.claimLearningMilestone(1);
       expect(claimed, true);
       expect(notifier.state.claimedLearningMilestones, contains(1));
-      expect(notifier.state.credits, 1000.0);
+      expect(notifier.state.credits, 150.0);
       expect(notifier.state.darkMatter, 0.0);
 
       // Next active milestone should be Quest 2
@@ -1156,17 +1148,17 @@ void main() {
       };
 
       final normalized = MissionModel.fromJson(legacyJson);
-      expect(normalized.rewardCoins, 2500.0); // Calibrated canonical value
+      expect(normalized.rewardCoins, 250.0); // Calibrated canonical value
       expect(normalized.isCompleted, true);
 
-      // 2. Dynamic Claim Scaling at Tier 1 vs Tier 5
+      // 2. Mission Claim at Tier 1 and Tier 5
       final stateT1 = GameState.initial().copyWith(
         highestTierUnlocked: 1,
         career: GameState.initial().career.copyWith(missions: [normalized]),
       );
       final notifierT1 = GameEconomyNotifier(stateT1);
       notifierT1.claimMission('m1_merge_3');
-      expect(notifierT1.state.credits, 2500.0);
+      expect(notifierT1.state.credits, 250.0);
 
       final stateT5 = GameState.initial().copyWith(
         highestTierUnlocked: 5,
@@ -1174,8 +1166,7 @@ void main() {
       );
       final notifierT5 = GameEconomyNotifier(stateT5);
       notifierT5.claimMission('m1_merge_3');
-      // Scaled by 1.5^4 = 5.0625 -> 506.25 coins
-      expect(notifierT5.state.credits > 500.0, true);
+      expect(notifierT5.state.credits, 250.0);
     });
 
     test('Daily Commander Calendar: Dynamic progression tier scaling', () {
@@ -1185,11 +1176,11 @@ void main() {
       notifierT1.claimDailyLoginReward();
       expect(notifierT1.state.credits, 150.0);
 
-      // Tier 6: Day 1 scaled by 1.6^5 = 10.48576 -> 1572.86 coins
+      // Tier 6: Day 1 scaled by 1.0 + (5 * 0.35) = 2.75 -> 412.5 coins
       final stateT6 = GameState.initial().copyWith(highestTierUnlocked: 6);
       final notifierT6 = GameEconomyNotifier(stateT6);
       notifierT6.claimDailyLoginReward();
-      expect(notifierT6.state.credits > 1500.0, true);
+      expect(notifierT6.state.credits, closeTo(412.5, 0.1));
     });
 
     test('GameState Full JSON Serialization & Deserialization Round-Trip', () {

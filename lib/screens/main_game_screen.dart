@@ -266,7 +266,19 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
                         .acknowledgeDarkMatterIntro();
                     _openGameModal((c) => const SkillTreeModal());
                   },
-                ));
+                  onDismiss: () {
+                    ref
+                        .read(gameStateProvider.notifier)
+                        .acknowledgeDarkMatterIntro();
+                  },
+                )).then((_) {
+              if (mounted &&
+                  !ref.read(gameStateProvider).hasSeenDarkMatterIntro) {
+                ref
+                    .read(gameStateProvider.notifier)
+                    .acknowledgeDarkMatterIntro();
+              }
+            });
           }
         });
       }
@@ -286,7 +298,19 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
                           .acknowledgeDarkMatterIntro();
                       _openGameModal((c) => const SkillTreeModal());
                     },
-                  ));
+                    onDismiss: () {
+                      ref
+                          .read(gameStateProvider.notifier)
+                          .acknowledgeDarkMatterIntro();
+                    },
+                  )).then((_) {
+                if (mounted &&
+                    !ref.read(gameStateProvider).hasSeenDarkMatterIntro) {
+                  ref
+                      .read(gameStateProvider.notifier)
+                      .acknowledgeDarkMatterIntro();
+                }
+              });
               return;
             }
             _openGameModal((ctx) => FeatureUnlockedModal(
@@ -470,16 +494,19 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
         if (gameState.tutorialStep < 5) return;
 
         if (offlineResult != null && offlineResult.hasSignificantEarnings) {
+          bool hasClaimed = false;
           await _openGameModal((ctx) => OfflineEarningsModal(
                 result: offlineResult,
                 isVip: gameState.hasRemovedAds,
                 onClaimRegular: () {
+                  hasClaimed = true;
                   ref
                       .read(gameStateProvider.notifier)
                       .claimOfflineEarnings(offlineResult.coinsEarned);
                   _triggerRewardFlyingCoins(count: 10);
                 },
                 onClaimDoubled: () {
+                  hasClaimed = true;
                   ref.read(gameStateProvider.notifier).claimOfflineEarnings(
                         offlineResult.coinsEarned,
                         doubleReward: true,
@@ -487,6 +514,12 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
                   _triggerRewardFlyingCoins(count: 14);
                 },
               ));
+          if (!hasClaimed && mounted) {
+            ref
+                .read(gameStateProvider.notifier)
+                .claimOfflineEarnings(offlineResult.coinsEarned);
+            _triggerRewardFlyingCoins(count: 8);
+          }
         } else if (gameState.canClaimDailyReward &&
             UserGrowthService.isFeatureUnlocked(
               GameFeature.dailyCalendar,
@@ -908,6 +941,9 @@ class _MainGameScreenState extends ConsumerState<MainGameScreen>
                     },
                     onOpenSettings: () {
                       _openGameModal((ctx) => const SettingsModal());
+                    },
+                    onOpenTechTree: () {
+                      _openGameModal((ctx) => const SkillTreeModal());
                     },
                   ),
 

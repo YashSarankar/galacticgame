@@ -47,7 +47,7 @@ class _DiscoveryModalState extends State<DiscoveryModal>
   Widget build(BuildContext context) {
     final ship = widget.ship;
     final double discoveryBountyCredits =
-        1000.0 * pow(1.5, (ship.tier - 1).clamp(0, 50));
+        (ShipModel.calculatePurchaseCost(0, ship.tier) * 0.50).floorToDouble();
     final double discoveryBountyDm = ship.tier >= 3 ? (ship.tier * 2.0) : 0.0;
 
     return Dialog(

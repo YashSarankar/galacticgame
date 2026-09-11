@@ -46,7 +46,7 @@ class MysteryCardReward {
         description: 'Instant massive coin payout from all active ships.',
         iconAsset: 'assets/kenney_space-shooter-remastered/PNG/Power-ups/star_gold.png',
         colorValue: 0xFFFFD700,
-        creditsValue: max(500.0, fleetIncomePerLap * 20.0),
+        creditsValue: max(50.0, fleetIncomePerLap * 15.0),
       ),
 
       // 2. Crate Airdrop
